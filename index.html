@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Games - Free Web Games</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(78, 205, 196, 0.3), inset 0 0 20px rgba(78, 205, 196, 0.1); }
+            50% { box-shadow: 0 0 40px rgba(78, 205, 196, 0.6), inset 0 0 30px rgba(78, 205, 196, 0.2); }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            font-family: 'Poppins', sans-serif;
+            min-height: 100vh;
+            padding: 0;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #menuBar {
+            width: 100%;
+            height: 70px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(78, 205, 196, 0.2);
+            position: relative;
+            z-index: 10;
+        }
+
+        #homeButton {
+            padding: 12px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            letter-spacing: 0.5px;
+        }
+
+        #homeButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        #homeButton:active {
+            transform: translateY(0);
+        }
+
+        #pageTitle {
+            font-size: 64px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(78, 205, 196, 0.3);
+            margin: 60px 0 15px 0;
+            text-align: center;
+            letter-spacing: -2px;
+            animation: slideIn 0.8s ease-out;
+            position: relative;
+            z-index: 5;
+        }
+
+        #subtitle {
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            animation: slideIn 0.8s ease-out 0.2s both;
+            position: relative;
+            z-index: 5;
+        }
+
+        #categoryMenu {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 5;
+            flex-wrap: wrap;
+            padding: 0 20px;
+        }
+
+        .categoryBtn {
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(78, 205, 196, 0.15);
+            color: #4ecdc4;
+            border: 2px solid rgba(78, 205, 196, 0.3);
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: 0.5px;
+            text-transform: capitalize;
+        }
+
+        .categoryBtn:hover {
+            background: rgba(78, 205, 196, 0.25);
+            border-color: rgba(78, 205, 196, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .categoryBtn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        #gamesContainer {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 40px;
+            padding: 40px 40px 80px 40px;
+            max-width: 1600px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 5;
+        }
+
+        .gameCard {
+            background: rgba(26, 26, 46, 0.6);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(78, 205, 196, 0.3);
+            border-radius: 20px;
+            padding: 0;
+            width: 350px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            animation: slideIn 1s ease-out;
+        }
+
+        .gameCard:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .gameCard:hover {
+            transform: translateY(-15px);
+            border-color: rgba(78, 205, 196, 0.8);
+            box-shadow: 0 20px 60px rgba(78, 205, 196, 0.3), inset 0 0 30px rgba(78, 205, 196, 0.1);
+            background: rgba(26, 26, 46, 0.8);
+        }
+
+        .gameCard:hover .gameThumbnail {
+            transform: scale(1.08);
+            filter: brightness(1.1);
+        }
+
+        .gameThumbnail {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            transition: transform 0.4s ease-out, filter 0.4s ease-out;
+            position: relative;
+        }
+
+        .playCountBadge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            color: #4ecdc4;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid rgba(78, 205, 196, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .gameCardContent {
+            padding: 30px;
+        }
+
+        .gameCard h2 {
+            color: #4ecdc4;
+            font-size: 28px;
+            margin-bottom: 12px;
+            text-shadow: 0 0 20px rgba(78, 205, 196, 0.4);
+            font-weight: 700;
+        }
+
+        .gameCard p {
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 15px;
+            margin-bottom: 20px;
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        .gameTagsContainer {
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .gameCard .gameTag {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(78, 205, 196, 0.15) 0%, rgba(68, 168, 216, 0.15) 100%);
+            color: #4ecdc4;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease-out;
+        }
+
+        .gameCard .gameTag:hover {
+            background: linear-gradient(135deg, rgba(78, 205, 196, 0.25) 0%, rgba(68, 168, 216, 0.25) 100%);
+            border-color: rgba(78, 205, 196, 0.6);
+        }
+
+        .playButton {
+            width: 100%;
+            padding: 15px;
+            margin-top: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .playButton:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 35px rgba(102, 126, 234, 0.6);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .playButton:active {
+            transform: translateY(-1px);
+        }
+
+        .comingSoon {
+            opacity: 0.7;
+        }
+
+        .comingSoon .gameThumbnail {
+            filter: grayscale(1) brightness(0.8);
+        }
+
+        .comingSoon h2 {
+            color: #888;
+        }
+
+        .comingSoon p {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .comingSoon .gameTag {
+            color: #666;
+            border-color: rgba(100, 100, 100, 0.3);
+            background: rgba(100, 100, 100, 0.1);
+        }
+
+        .comingSoon .playButton {
+            background: rgba(100, 100, 100, 0.4);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .comingSoon .playButton:hover {
+            transform: none;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="menuBar">
+        <button id="homeButton" disabled style="opacity: 0.5; cursor: default;">Home</button>
+    </div>
+    
+    <div id="pageTitle">MY GAMES</div>
+    <div id="subtitle">A Collection of Free Web-Based Games</div>
+
+    <div id="categoryMenu">
+        <button class="categoryBtn active" data-category="all">All Games</button>
+        <button class="categoryBtn" data-category="action">Action</button>
+        <button class="categoryBtn" data-category="survival">Survival</button>
+        <button class="categoryBtn" data-category="puzzle">Puzzle</button>
+    </div>
+
+    <div id="gamesContainer">
+        <!-- SMOT Game Card -->
+        <div class="gameCard" data-category="action survival">
+            <div style="position: relative;">
+                <img src="01 - So many of them/img/SMOT-thumbnail.jpg" alt="So Many Of Them" class="gameThumbnail">
+                <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
+            </div>
+            <div class="gameCardContent">
+                <h2>🔥 So Many Of Them</h2>
+                <p>Survive endless waves of enemies! Use your rope swing or blast weapons to defend yourself. How long can you last?</p>
+                <div class="gameTagsContainer">
+                    <span class="gameTag">Survival</span>
+                    <span class="gameTag">Action</span>
+                </div>
+                <button class="playButton" onclick="recordGamePlay('smot'); window.location.href='01 - So many of them/SMOTgame.html'">PLAY NOW</button>
+            </div>
+        </div>
+
+        <!-- Coming Soon Games -->
+        <div class="gameCard comingSoon" data-category="all">
+            <div style="width: 100%; height: 220px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%); display: flex; align-items: center; justify-content: center; position: relative;">
+                <div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 60px;">🎮</div>
+            </div>
+            <div class="gameCardContent">
+                <h2>Coming Soon</h2>
+                <p>More exciting games are in development! Stay tuned for more free games coming to this collection.</p>
+                <div class="gameTagsContainer">
+                    <span class="gameTag">TBD</span>
+                </div>
+                <button class="playButton" disabled>COMING SOON</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load play counts on page load
+        function loadPlayCounts() {
+            const cards = document.querySelectorAll('.gameCard[data-category]');
+            cards.forEach(card => {
+                const gameId = card.dataset.gameId || getGameIdFromCard(card);
+                const playCount = localStorage.getItem(`game_plays_${gameId}`) || '0';
+                const playCountElement = card.querySelector('.playCount');
+                if (playCountElement) {
+                    playCountElement.textContent = playCount;
+                }
+            });
+        }
+
+        function getGameIdFromCard(card) {
+            if (card.querySelector('.playButton').onclick.toString().includes('smot')) {
+                return 'smot';
+            }
+            return 'unknown';
+        }
+
+        // Record game play
+        function recordGamePlay(gameId) {
+            const key = `game_plays_${gameId}`;
+            const currentCount = parseInt(localStorage.getItem(key) || '0');
+            localStorage.setItem(key, currentCount + 1);
+        }
+
+        // Category filter
+        document.querySelectorAll('.categoryBtn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.categoryBtn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                const selectedCategory = this.dataset.category;
+                const cards = document.querySelectorAll('.gameCard[data-category]');
+
+                cards.forEach(card => {
+                    const cardCategories = card.dataset.category.split(' ');
+                    if (selectedCategory === 'all' || cardCategories.includes(selectedCategory)) {
+                        card.style.display = '';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', loadPlayCounts);
+    </script>
+</body>
+</html>
