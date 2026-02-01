@@ -349,8 +349,8 @@
     <div id="categoryMenu">
         <button class="categoryBtn active" data-category="all">All Games</button>
         <button class="categoryBtn" data-category="action">Action</button>
+        <button class="categoryBtn" data-category="strategy">Strategy</button>
         <button class="categoryBtn" data-category="survival">Survival</button>
-        <button class="categoryBtn" data-category="puzzle">Puzzle</button>
     </div>
 
     <div id="gamesContainer">
@@ -368,6 +368,23 @@
                     <span class="gameTag">Action</span>
                 </div>
                 <button class="playButton" onclick="recordGamePlay('smot'); window.location.href='01 - So many of them/SMOTgame.html'">PLAY NOW</button>
+            </div>
+        </div>
+
+        <!-- Tower Defense Game Card -->
+        <div class="gameCard" data-category="strategy action">
+            <div style="position: relative;">
+                <div style="width: 100%; height: 220px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%); display: flex; align-items: center; justify-content: center; position: relative; font-size: 80px;">🏰</div>
+                <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
+            </div>
+            <div class="gameCardContent">
+                <h2>🏰 Tower Defense</h2>
+                <p>Defend your kingdom against waves of enemies! Place strategic towers and manage your gold wisely. Can you survive all 5 levels?</p>
+                <div class="gameTagsContainer">
+                    <span class="gameTag">Strategy</span>
+                    <span class="gameTag">Action</span>
+                </div>
+                <button class="playButton" onclick="recordGamePlay('td'); window.location.href='02 - Tower Defense/TDgame.html'">PLAY NOW</button>
             </div>
         </div>
 
