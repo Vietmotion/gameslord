@@ -170,9 +170,9 @@
             justify-content: center;
             align-items: flex-start;
             flex-wrap: wrap;
-            gap: 40px;
-            padding: 40px 40px 80px 40px;
-            max-width: 1600px;
+            gap: 20px;
+            padding: 40px 20px 80px 20px;
+            max-width: 1900px;
             margin: 0 auto;
             position: relative;
             z-index: 5;
@@ -184,7 +184,11 @@
             border: 2px solid rgba(78, 205, 196, 0.3);
             border-radius: 20px;
             padding: 0;
-            width: 350px;
+            width: calc(20% - 16px);
+            min-width: 280px;
+            height: 550px;
+            display: flex;
+            flex-direction: column;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             overflow: hidden;
@@ -202,17 +206,42 @@
             background: rgba(26, 26, 46, 0.8);
         }
 
-        .gameCard:hover .gameThumbnail {
-            transform: scale(1.08);
-            filter: brightness(1.1);
-        }
-
         .gameThumbnail {
             width: 100%;
             height: 220px;
             object-fit: cover;
-            transition: transform 0.4s ease-out, filter 0.4s ease-out;
+            transition: transform 0.6s ease-out, filter 0.6s ease-out;
             position: relative;
+            cursor: pointer;
+        }
+        
+        .gameCard > div:first-child {
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .gameCard > div:first-child::after {
+            content: '▶';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 60px;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 0 20px rgba(102, 126, 234, 0.8);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        .gameCard > div:first-child:hover::after {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        
+        .gameCard > div:first-child:hover .gameThumbnail {
+            transform: scale(1.15);
+            filter: brightness(1.3) contrast(1.1);
         }
 
         .playCountBadge {
@@ -234,6 +263,9 @@
 
         .gameCardContent {
             padding: 30px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
         }
 
         .gameCard h2 {
@@ -250,6 +282,7 @@
             margin-bottom: 20px;
             line-height: 1.7;
             font-weight: 300;
+            flex: 1;
         }
 
         .gameTagsContainer {
@@ -278,20 +311,7 @@
         }
 
         .playButton {
-            width: 100%;
-            padding: 15px;
-            margin-top: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
-            letter-spacing: 1px;
-            text-transform: uppercase;
+            display: none;
         }
 
         .playButton:hover {
@@ -359,7 +379,7 @@
     <div id="gamesContainer">
         <!-- SMOT Game Card -->
         <div class="gameCard" data-category="action survival">
-            <div style="position: relative;">
+            <div style="position: relative;" onclick="recordGamePlay('smot'); window.location.href='01 - So many of them/SMOTgame.html'">
                 <img src="01 - So many of them/img/SMOT-thumbnail.jpg" alt="So Many Of Them" class="gameThumbnail">
                 <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
             </div>
@@ -393,7 +413,7 @@
 
         <!-- Space Pong Game Card -->
         <div class="gameCard" data-category="action">
-            <div style="position: relative;">
+            <div style="position: relative;" onclick="recordGamePlay('spacepong'); window.location.href='03 - Space Pong/spacepong.html'">
                 <img src="03 - Space Pong/img/thumbnail.png" alt="Space Pong" class="gameThumbnail">
                 <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
             </div>
@@ -407,9 +427,26 @@
             </div>
         </div>
 
+        <!-- Gun Rider Game Card -->
+        <div class="gameCard" data-category="action">
+            <div style="position: relative;" onclick="recordGamePlay('gunrider'); window.location.href='04 - Gun Rider/gunrider.html'">
+                <div style="width: 100%; height: 220px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%); display: flex; align-items: center; justify-content: center; position: relative;">
+                    <div style="text-align: center; color: rgba(78, 205, 196, 0.8); font-size: 60px;">🤠</div>
+                </div>
+                <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
+            </div>
+            <div class="gameCardContent">
+                <h2>🤠 Gun Rider</h2>
+                <p>Ride through the desert on your horse! Shoot enemies and avoid obstacles in this wild western adventure. How far can you ride?</p>
+                <div class="gameTagsContainer">
+                    <span class="gameTag">Action</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Chess War Game Card -->
         <div class="gameCard" data-category="strategy">
-            <div style="position: relative;">
+            <div style="position: relative;" onclick="recordGamePlay('chesswar'); window.location.href='05 - Chess War/chess-war.html'">
                 <div style="width: 100%; height: 220px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%); display: flex; align-items: center; justify-content: center; position: relative;">
                     <div style="text-align: center; color: rgba(78, 205, 196, 0.8); font-size: 60px;">♟️</div>
                 </div>

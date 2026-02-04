@@ -222,18 +222,46 @@
 
         #controls {
             position: absolute;
-            bottom: 20px;
+            top: 12px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(26, 26, 46, 0.8);
+            background: rgba(26, 26, 46, 0.85);
             backdrop-filter: blur(10px);
-            padding: 15px 25px;
-            border-radius: 10px;
+            padding: 8px 10px;
+            border-radius: 999px;
             border: 1px solid rgba(78, 205, 196, 0.3);
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 12px;
             text-align: center;
-            z-index: 100;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .turnDot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: inline-block;
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.25);
+        }
+
+        .turnTimer {
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            color: rgba(255, 255, 255, 0.9);
+            min-width: 48px;
+            text-align: right;
+        }
+
+        .turnDot.p1 {
+            background: #4ecdc4;
+        }
+
+        .turnDot.p2 {
+            background: #ff6b6b;
         }
     </style>
 </head>
@@ -263,8 +291,9 @@
                 <button onclick="location.reload()">Play Again</button>
             </div>
         </div>
-        <div id="controls">
-            <strong id="turnText">PLAYER 1'S TURN</strong> | ←→: Move | ↑↓: Angle | SPACE: Charge & Fire | <span style="color: #ff6b6b;">P2: BOT</span>
+        <div id="controls" aria-label="Turn indicator">
+            <span id="turnDot" class="turnDot p1" title="Player 1's turn"></span>
+            <span id="turnTimer" class="turnTimer">12.0s</span>
         </div>
     </div>
 
@@ -283,38 +312,58 @@
             botMoveTimer: 0,
             botTargetX: 0,
             botCalculatedAngle: 0,
-            botCalculatedPower: 0
+            botCalculatedPower: 0,
+            turnDelay: 0,
+            waitingForTurn: false,
+            cameraShake: 0,
+            cameraShakeX: 0,
+            cameraShakeY: 0,
+            timeScale: 1,
+            endSlowMo: false,
+            endTimer: 0,
+            maxTurnTime: 12,
+            turnTimeLeft: 12
         };
 
         // Players
         const player1 = {
             x: 150,
             y: 0,
+            vx: 0,
+            vy: 0,
             angle: 45,
             power: 0,
             health: 100,
             maxHealth: 100,
-            fuel: 100,
-            maxFuel: 100,
+            fuel: 300,
+            maxFuel: 300,
             color: '#4ecdc4',
             charging: false,
             vehicleColor: '#667eea',
-            groundAngle: 0
+            groundAngle: 0,
+            shake: 0,
+            shakeX: 0,
+            shakeY: 0
         };
 
         const player2 = {
             x: 1050,
             y: 0,
+            vx: 0,
+            vy: 0,
             angle: 135,
             power: 0,
             health: 100,
             maxHealth: 100,
-            fuel: 100,
-            maxFuel: 100,
+            fuel: 300,
+            maxFuel: 300,
             color: '#ff6b6b',
             charging: false,
             vehicleColor: '#764ba2',
-            groundAngle: 0
+            groundAngle: 0,
+            shake: 0,
+            shakeX: 0,
+            shakeY: 0
         };
 
         // Terrain
@@ -326,6 +375,9 @@
 
         // Craters system
         let craters = [];
+
+        // Water level
+        const WATER_LEVEL = 650;
 
         // Initialize terrain
         function initTerrain() {
@@ -403,6 +455,9 @@
         function startGame() {
             document.getElementById('startScreen').style.display = 'none';
             game.isRunning = true;
+            game.turnTimeLeft = game.maxTurnTime;
+            updateTurnTimer();
+            updateTurnIndicator();
             
             // Record play count
             const playKey = 'game_plays_gunrider';
@@ -415,6 +470,11 @@
         window.addEventListener('keydown', (e) => {
             keys[e.key] = true;
             
+            // Prevent default browser scrolling for arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+            
             if (e.key === ' ' && game.isRunning && !projectile) {
                 e.preventDefault();
                 const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
@@ -424,6 +484,11 @@
 
         window.addEventListener('keyup', (e) => {
             keys[e.key] = false;
+            
+            // Prevent default browser scrolling for arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
             
             if (e.key === ' ' && game.isRunning) {
                 e.preventDefault();
@@ -455,7 +520,7 @@
             player.power = 0;
         }
 
-        function updateProjectile() {
+        function updateProjectile(dt = 1) {
             if (!projectile) return;
             
             // Add to trail
@@ -463,9 +528,9 @@
             if (projectile.trail.length > 20) projectile.trail.shift();
             
             // Physics
-            projectile.vy += 0.5; // Gravity
-            projectile.x += projectile.vx;
-            projectile.y += projectile.vy;
+            projectile.vy += 0.5 * dt; // Gravity
+            projectile.x += projectile.vx * dt;
+            projectile.y += projectile.vy * dt;
             
             // Check terrain collision
             const terrainY = getTerrainHeight(projectile.x);
@@ -487,6 +552,18 @@
             if (distance < 30) {
                 const damage = 20 + Math.random() * 15;
                 checkPlayer.health = Math.max(0, checkPlayer.health - damage);
+                
+                // Apply knockback effect - push away from projectile
+                const knockbackDir = Math.sign(checkPlayer.x - projectile.x);
+                checkPlayer.vx = knockbackDir * 3; // Horizontal knockback
+                checkPlayer.vy -= 2; // Upward knockback
+                
+                // Trigger character shake
+                checkPlayer.shake = 15;
+                
+                // Trigger camera shake
+                game.cameraShake = 12;
+                
                 createExplosion(projectile.x, projectile.y);
                 projectile = null;
                 
@@ -525,7 +602,7 @@
         function createCrater(x, y) {
             // Modify terrain to create an actual crater/hole
             const craterRadius = 60;
-            const craterDepth = 50;
+            const craterDepth = 50; // Back to original depth
             
             // Find all terrain points within crater radius and lower them
             for (let i = 0; i < terrain.length; i++) {
@@ -536,24 +613,108 @@
                     // Create a smooth crater depression using cosine falloff
                     const falloff = Math.cos((distance / craterRadius) * Math.PI / 2);
                     const depression = craterDepth * falloff;
-                    point.y = Math.min(point.y + depression, 650); // Lower the terrain but don't go too deep
+                    point.y += depression; // Lower the terrain (no limit - can go infinitely deep)
                 }
             }
             
-            // Update player positions to follow terrain changes
-            player1.y = getTerrainHeight(player1.x) - 40;
-            player1.groundAngle = getTerrainSlope(player1.x);
+            // Smooth the terrain to avoid too many sharp peaks and valleys
+            smoothTerrain();
             
-            player2.y = getTerrainHeight(player2.x) - 40;
+            // Don't instantly snap players - they will fall with gravity
+            // Just update ground angle for when they land
+            player1.groundAngle = getTerrainSlope(player1.x);
             player2.groundAngle = getTerrainSlope(player2.x);
         }
+        
+        function smoothTerrain() {
+            // Apply smoothing to reduce sharp ups and downs
+            const smoothingPasses = 2;
+            const smoothingStrength = 0.3; // How much to blend with neighbors
+            
+            for (let pass = 0; pass < smoothingPasses; pass++) {
+                const newHeights = [];
+                
+                for (let i = 0; i < terrain.length; i++) {
+                    if (i === 0 || i === terrain.length - 1) {
+                        // Keep endpoints unchanged
+                        newHeights[i] = terrain[i].y;
+                    } else {
+                        // Blend with neighbors to smooth out sharp transitions
+                        const current = terrain[i].y;
+                        const prev = terrain[i - 1].y;
+                        const next = terrain[i + 1].y;
+                        const average = (prev + current + next) / 3;
+                        
+                        // Mix between current and average based on smoothing strength
+                        newHeights[i] = current + (average - current) * smoothingStrength;
+                        
+                        // No depth limit - terrain can be carved infinitely deep
+                    }
+                }
+                
+                // Apply the new heights
+                for (let i = 0; i < terrain.length; i++) {
+                    terrain[i].y = newHeights[i];
+                }
+            }
+        }
+        
+        function updatePlayerGravity(player, dt = 1) {
+            // Apply horizontal velocity from knockback
+            player.x += player.vx * dt;
+            
+            // Apply friction to horizontal velocity
+            player.vx *= Math.pow(0.92, dt); // Friction/drag
+            
+            // Stop very small velocities
+            if (Math.abs(player.vx) < 0.1) {
+                player.vx = 0;
+            }
+            
+            // Keep players in bounds
+            player.x = Math.max(50, Math.min(1150, player.x));
+            
+            const terrainY = getTerrainHeight(player.x);
+            const playerBottom = player.y + 40; // Player is 40 pixels tall
+            
+            // Check if player fell into water (die when mostly submerged - 30 pixels into water)
+            if (playerBottom >= WATER_LEVEL + 30) {
+                const winner = player === player1 ? 2 : 1;
+                endGame(winner);
+                return;
+            }
+            
+            // Only collide with terrain if it's above water level
+            // If terrain is underwater, player falls through it
+            if (terrainY < WATER_LEVEL) {
+                // Terrain is above water - normal collision
+                if (playerBottom < terrainY) {
+                    player.vy += 0.6 * dt; // Gravity acceleration
+                    player.y += player.vy * dt;
+                    
+                    // Landing
+                    if (player.y + 40 >= terrainY) {
+                        player.y = terrainY - 40;
+                        player.vy = 0;
+                    }
+                } else {
+                    // On ground
+                    player.y = terrainY - 40;
+                    player.vy = 0;
+                }
+            } else {
+                // Terrain is underwater - player falls through
+                player.vy += 0.6 * dt; // Gravity acceleration
+                player.y += player.vy * dt;
+            }
+        }
 
-        function updateExplosions() {
+        function updateExplosions(dt = 1) {
             explosionParticles = explosionParticles.filter(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.vy += 0.3;
-                p.life -= 0.02;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 0.3 * dt;
+                p.life -= 0.02 * dt;
                 return p.life > 0;
             });
         }
@@ -563,21 +724,51 @@
             const dist2 = Math.sqrt((x - player2.x) ** 2 + (y - player2.y) ** 2);
             
             if (dist1 < 60) {
-                player1.health = Math.max(0, player1.health - 10);
+                const damage = 10;
+                player1.health = Math.max(0, player1.health - damage);
+                
+                // Apply knockback from explosion
+                const knockbackDir1 = Math.sign(player1.x - x);
+                player1.vx = knockbackDir1 * 2;
+                player1.vy -= 1.25;
+                
+                // Trigger effects when hit
+                player1.shake = 12;
+                game.cameraShake = 10;
+                
                 if (player1.health <= 0) endGame(2);
             }
             if (dist2 < 60) {
-                player2.health = Math.max(0, player2.health - 10);
+                const damage = 10;
+                player2.health = Math.max(0, player2.health - damage);
+                
+                // Apply knockback from explosion
+                const knockbackDir2 = Math.sign(player2.x - x);
+                player2.vx = knockbackDir2 * 2;
+                player2.vy -= 1.25;
+                
+                // Trigger effects when hit
+                player2.shake = 12;
+                game.cameraShake = 10;
+                
                 if (player2.health <= 0) endGame(1);
             }
         }
 
         function switchTurn() {
+            // Set delay before actually switching
+            game.waitingForTurn = true;
+            game.turnDelay = 90; // 1.5 second delay at 60fps
+        }
+        
+        function processTurnSwitch() {
             game.currentPlayer = game.currentPlayer === 1 ? 2 : 1;
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
             // Refuel at the start of each turn
             currentPlayerObj.fuel = currentPlayerObj.maxFuel;
-            document.getElementById('turnText').textContent = `PLAYER ${game.currentPlayer}'S TURN`;
+            game.turnTimeLeft = game.maxTurnTime;
+            updateTurnTimer();
+            updateTurnIndicator();
             
             // If it's bot's turn (Player 2), start thinking
             if (game.currentPlayer === 2) {
@@ -585,6 +776,28 @@
                 game.botMoveTimer = 0;
                 botCalculateMove();
             }
+            
+            game.waitingForTurn = false;
+        }
+
+        function updateTurnIndicator() {
+            const turnDot = document.getElementById('turnDot');
+            if (!turnDot) return;
+            if (game.currentPlayer === 1) {
+                turnDot.classList.remove('p2');
+                turnDot.classList.add('p1');
+                turnDot.title = "Player 1's turn";
+            } else {
+                turnDot.classList.remove('p1');
+                turnDot.classList.add('p2');
+                turnDot.title = "Player 2's turn";
+            }
+        }
+
+        function updateTurnTimer() {
+            const turnTimer = document.getElementById('turnTimer');
+            if (!turnTimer) return;
+            turnTimer.textContent = `${game.turnTimeLeft.toFixed(1)}s`;
         }
 
         // Bot AI
@@ -592,32 +805,41 @@
             // Decide on target position (move closer or find better ground)
             const distanceToEnemy = Math.abs(player2.x - player1.x);
             
-            // Try to get to optimal range (300-500 pixels away)
-            if (distanceToEnemy > 500) {
-                game.botTargetX = player2.x - 100 - Math.random() * 100; // Move closer
+            // Try to get to optimal range (350-550 pixels away)
+            if (distanceToEnemy > 600) {
+                game.botTargetX = player2.x - 120 - Math.random() * 80; // Move closer (toward left where P1 is)
             } else if (distanceToEnemy < 300) {
-                game.botTargetX = player2.x + 100 + Math.random() * 100; // Move away
+                game.botTargetX = player2.x + 80 + Math.random() * 60; // Move away (toward right)
             } else {
-                game.botTargetX = player2.x + (Math.random() - 0.5) * 80; // Small adjustment
+                game.botTargetX = player2.x + (Math.random() - 0.5) * 60; // Small adjustment
             }
             
             // Keep within bounds
             game.botTargetX = Math.max(150, Math.min(canvas.width - 150, game.botTargetX));
             
             // Calculate angle and power to hit player 1
-            const dx = player1.x - player2.x;
+            const dx = player2.x - player1.x; // Positive value (distance to target on left)
             const dy = player1.y - player2.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Simple physics calculation with some randomness
-            // Calculate absolute angle in world space, then convert to slope-relative
-            const absoluteAngle = Math.atan2(-dy, dx) * 180 / Math.PI;
-            const relativeAngle = absoluteAngle + player2.groundAngle;
-            game.botCalculatedAngle = Math.max(10, Math.min(170, relativeAngle + (Math.random() - 0.5) * 20));
+            // Calculate as if shooting right, then mirror it for shooting left
+            let baseAngle = Math.atan2(-dy, dx) * 180 / Math.PI;
             
-            // Power based on distance with variation
-            const basePower = Math.min(100, (distance / 10) + 20);
-            game.botCalculatedPower = Math.max(30, Math.min(100, basePower + (Math.random() - 0.5) * 30));
+            // Adjust for projectile arc - aim higher for longer distances
+            const arcAdjustment = Math.min(20, distance / 35);
+            baseAngle += arcAdjustment;
+            
+            // Add some inaccuracy to make it challenging but fair (±10 degrees)
+            const inaccuracy = (Math.random() - 0.5) * 20;
+            baseAngle += inaccuracy;
+            
+            // Mirror the angle: flip it to shoot left instead of right
+            game.botCalculatedAngle = 180 - Math.max(15, Math.min(85, baseAngle));
+            
+            // Power based on distance
+            const basePower = Math.min(90, (distance / 7) + 30);
+            const powerVariation = (Math.random() - 0.5) * 18; // ±9 power
+            game.botCalculatedPower = Math.max(40, Math.min(100, basePower + powerVariation));
         }
 
         function updateBot() {
@@ -635,7 +857,7 @@
                     // Check bounds and distance to player 1
                     if (newX > 50 && newX < canvas.width - 50 && Math.abs(newX - player1.x) > 100) {
                         player2.x = newX;
-                        player2.y = getTerrainHeight(player2.x) - 40;
+                        // Don't snap Y, let gravity handle it
                         player2.fuel = Math.max(0, player2.fuel - 2);
                     } else {
                         game.botMoveTimer = 60; // Skip to next phase if can't move
@@ -671,35 +893,70 @@
         }
 
         function endGame(winner) {
-            game.isRunning = false;
+            if (game.endSlowMo) return;
             game.winner = winner;
-            document.getElementById('winnerText').textContent = `PLAYER ${winner} WINS!`;
-            document.getElementById('gameOverScreen').style.display = 'flex';
+            game.endSlowMo = true;
+            game.endTimer = 90; // ~1.5s at 60fps
+            game.timeScale = 0.35;
+            game.waitingForTurn = true;
         }
 
         function update() {
             if (!game.isRunning) return;
+
+            const dt = game.timeScale;
+
+            if (game.endSlowMo) {
+                game.endTimer--;
+                if (game.endTimer <= 0) {
+                    game.isRunning = false;
+                    game.timeScale = 1;
+                    document.getElementById('winnerText').textContent = `PLAYER ${game.winner} WINS!`;
+                    document.getElementById('gameOverScreen').style.display = 'flex';
+                    return;
+                }
+            }
+            
+            // Handle turn delay countdown (physics continues, just delay turn switch)
+            if (game.waitingForTurn && !game.endSlowMo) {
+                game.turnDelay--;
+                if (game.turnDelay <= 0) {
+                    processTurnSwitch();
+                }
+                // Continue with physics updates below, just skip input
+            }
+
+            // Turn timer countdown (only when player can act)
+            if (!game.waitingForTurn && !game.endSlowMo && !projectile) {
+                game.turnTimeLeft = Math.max(0, game.turnTimeLeft - (1 / 60) * dt);
+                updateTurnTimer();
+                if (game.turnTimeLeft <= 0) {
+                    switchTurn();
+                }
+            }
             
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
             const otherPlayerObj = game.currentPlayer === 1 ? player2 : player1;
             
-            // Bot AI update
-            if (game.currentPlayer === 2) {
+            // Bot AI update (skip if waiting for turn)
+            if (game.currentPlayer === 2 && !game.waitingForTurn && !game.endSlowMo) {
                 updateBot();
             }
             
             // Movement controls (only when not firing and has fuel) - PLAYER 1 ONLY
-            if (game.currentPlayer === 1 && !projectile && !currentPlayerObj.charging && currentPlayerObj.fuel > 0) {
-                const moveSpeed = 1.5; // Slower movement
-                const fuelCost = 2; // Fuel cost per frame of movement
+            if (game.currentPlayer === 1 && !projectile && !currentPlayerObj.charging && currentPlayerObj.fuel > 0 && !game.waitingForTurn && !game.endSlowMo) {
+                    const moveSpeed = 1.2; // Reduced movement speed
                 
                 if (keys['ArrowLeft']) {
                     const newX = currentPlayerObj.x - moveSpeed;
                     // Don't go off screen or too close to other player
                     if (newX > 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
                         currentPlayerObj.x = newX;
-                        currentPlayerObj.y = getTerrainHeight(currentPlayerObj.x) - 40;
+                        // Don't snap Y, let gravity handle it
+                            const newSlope = getTerrainSlope(newX);
                         currentPlayerObj.groundAngle = getTerrainSlope(currentPlayerObj.x);
+                            // More fuel cost going uphill (positive slope when moving left), less downhill
+                            const fuelCost = newSlope > 0 ? 3 : 1.5;
                         currentPlayerObj.fuel = Math.max(0, currentPlayerObj.fuel - fuelCost);
                     }
                 }
@@ -708,15 +965,18 @@
                     // Don't go off screen or too close to other player
                     if (newX < canvas.width - 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
                         currentPlayerObj.x = newX;
-                        currentPlayerObj.y = getTerrainHeight(currentPlayerObj.x) - 40;
+                        // Don't snap Y, let gravity handle it
+                            const newSlope = getTerrainSlope(newX);
                         currentPlayerObj.groundAngle = getTerrainSlope(currentPlayerObj.x);
+                            // More fuel cost going uphill (negative slope when moving right), less downhill
+                            const fuelCost = newSlope < 0 ? 3 : 1.5;
                         currentPlayerObj.fuel = Math.max(0, currentPlayerObj.fuel - fuelCost);
                     }
                 }
             }
             
             // Angle control - PLAYER 1 ONLY
-            if (game.currentPlayer === 1) {
+            if (game.currentPlayer === 1 && !game.waitingForTurn && !game.endSlowMo) {
                 if (keys['ArrowUp'] && !keys['ArrowLeft'] && !keys['ArrowRight']) {
                     currentPlayerObj.angle = Math.min(170, currentPlayerObj.angle + 2);
                 }
@@ -725,13 +985,51 @@
                 }
             }
             
-            // Power charging - PLAYER 1 ONLY
-            if (game.currentPlayer === 1 && currentPlayerObj.charging && !projectile) {
-                currentPlayerObj.power = Math.min(100, currentPlayerObj.power + 2);
+            // Power charging - PLAYER 1 ONLY (block during waiting)
+            if (game.currentPlayer === 1 && currentPlayerObj.charging && !projectile && !game.waitingForTurn && !game.endSlowMo) {
+                currentPlayerObj.power = Math.min(100, currentPlayerObj.power + 2 * dt);
             }
             
-            updateProjectile();
-            updateExplosions();
+            // Apply gravity to both players so they fall into craters
+            updatePlayerGravity(player1, dt);
+            updatePlayerGravity(player2, dt);
+            
+            // Update shake effects
+            updateShake();
+            
+            updateProjectile(dt);
+            updateExplosions(dt);
+        }
+        
+        function updateShake() {
+            // Update camera shake
+            if (game.cameraShake > 0) {
+                game.cameraShake--;
+                game.cameraShakeX = (Math.random() - 0.5) * 8;
+                game.cameraShakeY = (Math.random() - 0.5) * 8;
+            } else {
+                game.cameraShakeX = 0;
+                game.cameraShakeY = 0;
+            }
+            
+            // Update player character shake
+            if (player1.shake > 0) {
+                player1.shake--;
+                player1.shakeX = (Math.random() - 0.5) * 4;
+                player1.shakeY = (Math.random() - 0.5) * 4;
+            } else {
+                player1.shakeX = 0;
+                player1.shakeY = 0;
+            }
+            
+            if (player2.shake > 0) {
+                player2.shake--;
+                player2.shakeX = (Math.random() - 0.5) * 4;
+                player2.shakeY = (Math.random() - 0.5) * 4;
+            } else {
+                player2.shakeX = 0;
+                player2.shakeY = 0;
+            }
         }
 
         function drawTerrain() {
@@ -756,9 +1054,35 @@
             ctx.stroke();
         }
 
+        function drawWater() {
+            // Water body
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.6)';
+            ctx.fillRect(0, WATER_LEVEL, canvas.width, canvas.height - WATER_LEVEL);
+            
+            // Wave animation
+            ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x <= canvas.width; x += 15) {
+                const waveOffset = Math.sin(x * 0.02 + Date.now() * 0.003) * 3;
+                if (x === 0) ctx.moveTo(x, WATER_LEVEL + waveOffset);
+                else ctx.lineTo(x, WATER_LEVEL + waveOffset);
+            }
+            ctx.stroke();
+            
+            // Water surface line
+            ctx.strokeStyle = 'rgba(100, 180, 220, 0.9)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, WATER_LEVEL);
+            ctx.lineTo(canvas.width, WATER_LEVEL);
+            ctx.stroke();
+        }
+
         function drawPlayer(player, isActive) {
             ctx.save();
-            ctx.translate(player.x, player.y);
+            // Apply character shake
+            ctx.translate(player.x + player.shakeX, player.y + player.shakeY);
             // Rotate based on ground slope (negate to get correct tilt direction)
             ctx.rotate(-player.groundAngle * Math.PI / 180);
             
@@ -814,33 +1138,61 @@
             
             ctx.restore();
             
-            // Health bar (draw outside rotation, bottom corner)
-            const barWidth = 60;
-            const barHeight = 8;
-            const barX = player === player1 ? 10 : canvas.width - barWidth - 10;
-            const barY = canvas.height - 60;
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            // Health/Fuel bars (top corners)
+            const barWidth = 120;
+            const barHeight = 12;
+            const barY = 14;
+            const iconSize = 14;
+            const iconGap = 8;
+            const panelPad = 14;
+            const barX = player === player1
+                ? panelPad + iconSize + iconGap
+                : canvas.width - panelPad - iconSize - iconGap - barWidth;
+            const iconX = player === player1 ? panelPad : barX - iconGap - iconSize;
+
+            // Health icon (heart)
+            ctx.fillStyle = '#ff6b6b';
+            ctx.beginPath();
+            const hx = iconX + iconSize / 2;
+            const hy = barY + iconSize / 2 - 1;
+            ctx.moveTo(hx, hy + 4);
+            ctx.bezierCurveTo(hx - 6, hy - 2, hx - 8, hy + 6, hx, hy + 9);
+            ctx.bezierCurveTo(hx + 8, hy + 6, hx + 6, hy - 2, hx, hy + 4);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
             ctx.fillRect(barX, barY, barWidth, barHeight);
-            
+
             const healthWidth = (player.health / player.maxHealth) * barWidth;
-            ctx.fillStyle = player.health > 50 ? '#4ecdc4' : player.health > 25 ? '#f7b731' : '#ff6b6b';
+            ctx.fillStyle = player.health > 50 ? '#2ecc71' : player.health > 25 ? '#f7b731' : '#ff6b6b';
             ctx.fillRect(barX, barY, healthWidth, barHeight);
-            
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.lineWidth = 1;
             ctx.strokeRect(barX, barY, barWidth, barHeight);
-            
-            // Fuel bar (below health bar)
-            const fuelBarY = barY + 10;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+
+            // Fuel icon (gas pump)
+            const fuelBarY = barY + 20;
+            ctx.fillStyle = '#f7b731';
+            ctx.fillRect(iconX + 2, fuelBarY, iconSize - 4, iconSize);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillRect(iconX + 4, fuelBarY + 2, iconSize - 8, 4);
+            ctx.strokeStyle = 'rgba(20, 20, 30, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(iconX + iconSize - 2, fuelBarY + 3);
+            ctx.lineTo(iconX + iconSize + 6, fuelBarY + 3);
+            ctx.lineTo(iconX + iconSize + 6, fuelBarY + 10);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
             ctx.fillRect(barX, fuelBarY, barWidth, barHeight);
-            
+
             const fuelWidth = (player.fuel / player.maxFuel) * barWidth;
             ctx.fillStyle = player.fuel > 50 ? '#f7b731' : player.fuel > 25 ? '#ff9f43' : '#ee5a6f';
             ctx.fillRect(barX, fuelBarY, fuelWidth, barHeight);
-            
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.lineWidth = 1;
             ctx.strokeRect(barX, fuelBarY, barWidth, barHeight);
         }
@@ -917,6 +1269,10 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
+            // Apply camera shake
+            ctx.save();
+            ctx.translate(game.cameraShakeX, game.cameraShakeY);
+            
             drawTerrain();
             
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
@@ -927,6 +1283,11 @@
             drawPowerBar(currentPlayerObj);
             drawProjectile();
             drawExplosions();
+            
+            // Draw water on top so it covers submerged players
+            drawWater();
+            
+            ctx.restore();
             
             // Player labels
             ctx.fillStyle = player1.color;
