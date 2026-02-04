@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gun Rider - Artillery Battle</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #menuBar {
+            width: 100%;
+            height: 70px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(78, 205, 196, 0.2);
+            position: relative;
+            z-index: 10;
+        }
+
+        #homeButton {
+            padding: 12px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            letter-spacing: 0.5px;
+        }
+
+        #homeButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        #gameTitle {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(78, 205, 196, 0.3);
+            margin: 30px 0 20px 0;
+            z-index: 20;
+            letter-spacing: -1px;
+            position: relative;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 1200px;
+            height: 700px;
+            border: 2px solid rgba(78, 205, 196, 0.5);
+            background: rgba(26, 26, 46, 0.6);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.4), inset 0 0 30px rgba(78, 205, 196, 0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            z-index: 5;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+            backdrop-filter: blur(5px);
+            border-radius: 15px;
+        }
+
+        .startContent {
+            text-align: center;
+            color: white;
+            padding: 40px;
+        }
+
+        .startContent h1 {
+            font-size: 72px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+
+        .startContent p {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 300;
+            line-height: 1.6;
+        }
+
+        .startContent button {
+            padding: 16px 50px;
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 20px;
+        }
+
+        .startContent button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 35px rgba(102, 126, 234, 0.6);
+        }
+
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+            border-radius: 15px;
+        }
+
+        .gameOverContent {
+            text-align: center;
+            color: white;
+        }
+
+        .gameOverContent h1 {
+            font-size: 60px;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .gameOverContent p {
+            font-size: 24px;
+            margin-bottom: 40px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 300;
+        }
+
+        .gameOverContent button {
+            padding: 14px 40px;
+            font-size: 16px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .gameOverContent button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 35px rgba(102, 126, 234, 0.6);
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(26, 26, 46, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 15px 25px;
+            border-radius: 10px;
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            text-align: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="menuBar">
+        <button id="homeButton" onclick="window.location.href='../index.html'">Home</button>
+    </div>
+    <div id="gameTitle">🎯 GUN RIDER</div>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="startScreen">
+            <div class="startContent">
+                <h1>🎯 GUN RIDER</h1>
+                <p>Turn-based artillery battle against AI!</p>
+                <p>🎮 Use ←→ Arrow Keys to move</p>
+                <p>🎯 Use ↑↓ Arrow Keys to adjust angle</p>
+                <p>⚡ Hold SPACEBAR to charge power</p>
+                <p>🤖 Player 2 is controlled by AI</p>
+                <p>💥 Destroy your opponent!</p>
+                <button onclick="startGame()">START GAME</button>
+            </div>
+        </div>
+        <div id="gameOverScreen">
+            <div class="gameOverContent">
+                <h1 id="winnerText">PLAYER 1 WINS!</h1>
+                <p>Great shooting!</p>
+                <button onclick="location.reload()">Play Again</button>
+            </div>
+        </div>
+        <div id="controls">
+            <strong id="turnText">PLAYER 1'S TURN</strong> | ←→: Move | ↑↓: Angle | SPACE: Charge & Fire | <span style="color: #ff6b6b;">P2: BOT</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1200;
+        canvas.height = 700;
+
+        // Game state
+        const game = {
+            isRunning: false,
+            currentPlayer: 1,
+            winner: null,
+            botThinking: false,
+            botMoveTimer: 0,
+            botTargetX: 0,
+            botCalculatedAngle: 0,
+            botCalculatedPower: 0
+        };
+
+        // Players
+        const player1 = {
+            x: 150,
+            y: 0,
+            angle: 45,
+            power: 0,
+            health: 100,
+            maxHealth: 100,
+            fuel: 100,
+            maxFuel: 100,
+            color: '#4ecdc4',
+            charging: false,
+            vehicleColor: '#667eea',
+            groundAngle: 0
+        };
+
+        const player2 = {
+            x: 1050,
+            y: 0,
+            angle: 135,
+            power: 0,
+            health: 100,
+            maxHealth: 100,
+            fuel: 100,
+            maxFuel: 100,
+            color: '#ff6b6b',
+            charging: false,
+            vehicleColor: '#764ba2',
+            groundAngle: 0
+        };
+
+        // Terrain
+        const terrain = [];
+        const terrainSegments = 60;
+
+        // Projectile
+        let projectile = null;
+
+        // Craters system
+        let craters = [];
+
+        // Initialize terrain
+        function initTerrain() {
+            terrain.length = 0; // Clear existing terrain
+            
+            // Create a more defined terrain with clear slopes and flat sections
+            for (let i = 0; i <= terrainSegments; i++) {
+                const x = (canvas.width / terrainSegments) * i;
+                const ratio = i / terrainSegments;
+                let y = 550;
+                
+                // Section 1 (0-0.2): Flat ground on the left
+                if (ratio < 0.2) {
+                    y = 550;
+                }
+                // Section 2 (0.2-0.35): Uphill slope
+                else if (ratio < 0.35) {
+                    const sectionRatio = (ratio - 0.2) / 0.15;
+                    y = 550 - sectionRatio * 80; // Slope up
+                }
+                // Section 3 (0.35-0.5): Flat at top
+                else if (ratio < 0.5) {
+                    y = 470;
+                }
+                // Section 4 (0.5-0.65): Downhill slope
+                else if (ratio < 0.65) {
+                    const sectionRatio = (ratio - 0.5) / 0.15;
+                    y = 470 + sectionRatio * 100; // Slope down
+                }
+                // Section 5 (0.65-0.8): Flat valley
+                else if (ratio < 0.8) {
+                    y = 570;
+                }
+                // Section 6 (0.8-1.0): Uphill to the right
+                else {
+                    const sectionRatio = (ratio - 0.8) / 0.2;
+                    y = 570 - sectionRatio * 60; // Slope up
+                }
+                
+                terrain.push({ x, y });
+            }
+            
+            // Position players on terrain
+            player1.y = getTerrainHeight(player1.x) - 40;
+            player1.groundAngle = getTerrainSlope(player1.x);
+            
+            player2.y = getTerrainHeight(player2.x) - 40;
+            player2.groundAngle = getTerrainSlope(player2.x);
+        }
+
+        function getTerrainHeight(x) {
+            for (let i = 0; i < terrain.length - 1; i++) {
+                if (x >= terrain[i].x && x <= terrain[i + 1].x) {
+                    const ratio = (x - terrain[i].x) / (terrain[i + 1].x - terrain[i].x);
+                    return terrain[i].y + (terrain[i + 1].y - terrain[i].y) * ratio;
+                }
+            }
+            return terrain[terrain.length - 1].y;
+        }
+
+        function getTerrainSlope(x) {
+            // Get the angle of the slope at position x
+            for (let i = 0; i < terrain.length - 1; i++) {
+                if (x >= terrain[i].x && x <= terrain[i + 1].x) {
+                    const dx = terrain[i + 1].x - terrain[i].x;
+                    const dy = terrain[i + 1].y - terrain[i].y;
+                    // Negate because in canvas +y is down, we want uphill to be positive
+                    const angle = -Math.atan2(dy, dx) * 180 / Math.PI;
+                    return angle;
+                }
+            }
+            return 0;
+        }
+
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            game.isRunning = true;
+            
+            // Record play count
+            const playKey = 'game_plays_gunrider';
+            const currentCount = parseInt(localStorage.getItem(playKey) || '0');
+            localStorage.setItem(playKey, currentCount + 1);
+        }
+
+        // Input handling
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            if (e.key === ' ' && game.isRunning && !projectile) {
+                e.preventDefault();
+                const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+                currentPlayerObj.charging = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            
+            if (e.key === ' ' && game.isRunning) {
+                e.preventDefault();
+                const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+                if (currentPlayerObj.charging && currentPlayerObj.power > 0) {
+                    fire(currentPlayerObj);
+                    currentPlayerObj.charging = false;
+                }
+            }
+        });
+
+        function fire(player) {
+            // Barrel uses player.angle in rotated canvas
+            // World angle = player.angle + player.groundAngle (shown in display)
+            // But for projectile physics, convert the displayed world angle back
+            const worldAngle = player.angle + player.groundAngle;
+            const angleRad = (worldAngle * Math.PI) / 180;
+            const velocity = player.power / 5;
+            
+            projectile = {
+                x: player.x,
+                y: player.y - 20,
+                vx: Math.cos(angleRad) * velocity,
+                vy: -Math.sin(angleRad) * velocity,
+                radius: 8,
+                trail: []
+            };
+            
+            player.power = 0;
+        }
+
+        function updateProjectile() {
+            if (!projectile) return;
+            
+            // Add to trail
+            projectile.trail.push({ x: projectile.x, y: projectile.y });
+            if (projectile.trail.length > 20) projectile.trail.shift();
+            
+            // Physics
+            projectile.vy += 0.5; // Gravity
+            projectile.x += projectile.vx;
+            projectile.y += projectile.vy;
+            
+            // Check terrain collision
+            const terrainY = getTerrainHeight(projectile.x);
+            if (projectile.y >= terrainY) {
+                createExplosion(projectile.x, terrainY);
+                createCrater(projectile.x, terrainY);
+                checkHit(projectile.x, terrainY);
+                projectile = null;
+                switchTurn();
+                return;
+            }
+            
+            // Check player collision
+            const checkPlayer = game.currentPlayer === 1 ? player2 : player1;
+            const dx = projectile.x - checkPlayer.x;
+            const dy = projectile.y - checkPlayer.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < 30) {
+                const damage = 20 + Math.random() * 15;
+                checkPlayer.health = Math.max(0, checkPlayer.health - damage);
+                createExplosion(projectile.x, projectile.y);
+                projectile = null;
+                
+                if (checkPlayer.health <= 0) {
+                    endGame(game.currentPlayer);
+                } else {
+                    switchTurn();
+                }
+                return;
+            }
+            
+            // Check boundaries
+            if (projectile.x < 0 || projectile.x > canvas.width || projectile.y > canvas.height) {
+                projectile = null;
+                switchTurn();
+            }
+        }
+
+        let explosionParticles = [];
+
+        function createExplosion(x, y) {
+            for (let i = 0; i < 30; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                explosionParticles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    size: Math.random() * 5 + 2,
+                    color: `hsl(${Math.random() * 60 + 20}, 100%, 60%)`
+                });
+            }
+        }
+
+        function createCrater(x, y) {
+            // Modify terrain to create an actual crater/hole
+            const craterRadius = 60;
+            const craterDepth = 50;
+            
+            // Find all terrain points within crater radius and lower them
+            for (let i = 0; i < terrain.length; i++) {
+                const point = terrain[i];
+                const distance = Math.abs(point.x - x);
+                
+                if (distance < craterRadius) {
+                    // Create a smooth crater depression using cosine falloff
+                    const falloff = Math.cos((distance / craterRadius) * Math.PI / 2);
+                    const depression = craterDepth * falloff;
+                    point.y = Math.min(point.y + depression, 650); // Lower the terrain but don't go too deep
+                }
+            }
+            
+            // Update player positions to follow terrain changes
+            player1.y = getTerrainHeight(player1.x) - 40;
+            player1.groundAngle = getTerrainSlope(player1.x);
+            
+            player2.y = getTerrainHeight(player2.x) - 40;
+            player2.groundAngle = getTerrainSlope(player2.x);
+        }
+
+        function updateExplosions() {
+            explosionParticles = explosionParticles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.3;
+                p.life -= 0.02;
+                return p.life > 0;
+            });
+        }
+
+        function checkHit(x, y) {
+            const dist1 = Math.sqrt((x - player1.x) ** 2 + (y - player1.y) ** 2);
+            const dist2 = Math.sqrt((x - player2.x) ** 2 + (y - player2.y) ** 2);
+            
+            if (dist1 < 60) {
+                player1.health = Math.max(0, player1.health - 10);
+                if (player1.health <= 0) endGame(2);
+            }
+            if (dist2 < 60) {
+                player2.health = Math.max(0, player2.health - 10);
+                if (player2.health <= 0) endGame(1);
+            }
+        }
+
+        function switchTurn() {
+            game.currentPlayer = game.currentPlayer === 1 ? 2 : 1;
+            const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+            // Refuel at the start of each turn
+            currentPlayerObj.fuel = currentPlayerObj.maxFuel;
+            document.getElementById('turnText').textContent = `PLAYER ${game.currentPlayer}'S TURN`;
+            
+            // If it's bot's turn (Player 2), start thinking
+            if (game.currentPlayer === 2) {
+                game.botThinking = true;
+                game.botMoveTimer = 0;
+                botCalculateMove();
+            }
+        }
+
+        // Bot AI
+        function botCalculateMove() {
+            // Decide on target position (move closer or find better ground)
+            const distanceToEnemy = Math.abs(player2.x - player1.x);
+            
+            // Try to get to optimal range (300-500 pixels away)
+            if (distanceToEnemy > 500) {
+                game.botTargetX = player2.x - 100 - Math.random() * 100; // Move closer
+            } else if (distanceToEnemy < 300) {
+                game.botTargetX = player2.x + 100 + Math.random() * 100; // Move away
+            } else {
+                game.botTargetX = player2.x + (Math.random() - 0.5) * 80; // Small adjustment
+            }
+            
+            // Keep within bounds
+            game.botTargetX = Math.max(150, Math.min(canvas.width - 150, game.botTargetX));
+            
+            // Calculate angle and power to hit player 1
+            const dx = player1.x - player2.x;
+            const dy = player1.y - player2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Simple physics calculation with some randomness
+            // Calculate absolute angle in world space, then convert to slope-relative
+            const absoluteAngle = Math.atan2(-dy, dx) * 180 / Math.PI;
+            const relativeAngle = absoluteAngle + player2.groundAngle;
+            game.botCalculatedAngle = Math.max(10, Math.min(170, relativeAngle + (Math.random() - 0.5) * 20));
+            
+            // Power based on distance with variation
+            const basePower = Math.min(100, (distance / 10) + 20);
+            game.botCalculatedPower = Math.max(30, Math.min(100, basePower + (Math.random() - 0.5) * 30));
+        }
+
+        function updateBot() {
+            if (!game.botThinking || game.currentPlayer !== 2) return;
+            
+            game.botMoveTimer++;
+            
+            // Phase 1: Move to target position (first 60 frames)
+            if (game.botMoveTimer < 60 && player2.fuel > 0) {
+                const diff = game.botTargetX - player2.x;
+                if (Math.abs(diff) > 5) {
+                    const moveDirection = diff > 0 ? 1 : -1;
+                    const newX = player2.x + moveDirection * 3;
+                    
+                    // Check bounds and distance to player 1
+                    if (newX > 50 && newX < canvas.width - 50 && Math.abs(newX - player1.x) > 100) {
+                        player2.x = newX;
+                        player2.y = getTerrainHeight(player2.x) - 40;
+                        player2.fuel = Math.max(0, player2.fuel - 2);
+                    } else {
+                        game.botMoveTimer = 60; // Skip to next phase if can't move
+                    }
+                }
+            }
+            
+            // Phase 2: Adjust angle (frames 60-90)
+            if (game.botMoveTimer >= 60 && game.botMoveTimer < 90) {
+                const angleDiff = game.botCalculatedAngle - player2.angle;
+                if (Math.abs(angleDiff) > 2) {
+                    player2.angle += angleDiff > 0 ? 2 : -2;
+                    player2.angle = Math.max(10, Math.min(170, player2.angle));
+                }
+            }
+            
+            // Phase 3: Charge and fire (frames 90+)
+            if (game.botMoveTimer >= 90) {
+                if (!player2.charging) {
+                    player2.charging = true;
+                    player2.power = 0;
+                }
+                
+                if (player2.power < game.botCalculatedPower) {
+                    player2.power = Math.min(game.botCalculatedPower, player2.power + 2);
+                } else {
+                    // Fire!
+                    fire(player2);
+                    player2.charging = false;
+                    game.botThinking = false;
+                }
+            }
+        }
+
+        function endGame(winner) {
+            game.isRunning = false;
+            game.winner = winner;
+            document.getElementById('winnerText').textContent = `PLAYER ${winner} WINS!`;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+        }
+
+        function update() {
+            if (!game.isRunning) return;
+            
+            const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+            const otherPlayerObj = game.currentPlayer === 1 ? player2 : player1;
+            
+            // Bot AI update
+            if (game.currentPlayer === 2) {
+                updateBot();
+            }
+            
+            // Movement controls (only when not firing and has fuel) - PLAYER 1 ONLY
+            if (game.currentPlayer === 1 && !projectile && !currentPlayerObj.charging && currentPlayerObj.fuel > 0) {
+                const moveSpeed = 1.5; // Slower movement
+                const fuelCost = 2; // Fuel cost per frame of movement
+                
+                if (keys['ArrowLeft']) {
+                    const newX = currentPlayerObj.x - moveSpeed;
+                    // Don't go off screen or too close to other player
+                    if (newX > 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
+                        currentPlayerObj.x = newX;
+                        currentPlayerObj.y = getTerrainHeight(currentPlayerObj.x) - 40;
+                        currentPlayerObj.groundAngle = getTerrainSlope(currentPlayerObj.x);
+                        currentPlayerObj.fuel = Math.max(0, currentPlayerObj.fuel - fuelCost);
+                    }
+                }
+                if (keys['ArrowRight']) {
+                    const newX = currentPlayerObj.x + moveSpeed;
+                    // Don't go off screen or too close to other player
+                    if (newX < canvas.width - 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
+                        currentPlayerObj.x = newX;
+                        currentPlayerObj.y = getTerrainHeight(currentPlayerObj.x) - 40;
+                        currentPlayerObj.groundAngle = getTerrainSlope(currentPlayerObj.x);
+                        currentPlayerObj.fuel = Math.max(0, currentPlayerObj.fuel - fuelCost);
+                    }
+                }
+            }
+            
+            // Angle control - PLAYER 1 ONLY
+            if (game.currentPlayer === 1) {
+                if (keys['ArrowUp'] && !keys['ArrowLeft'] && !keys['ArrowRight']) {
+                    currentPlayerObj.angle = Math.min(170, currentPlayerObj.angle + 2);
+                }
+                if (keys['ArrowDown'] && !keys['ArrowLeft'] && !keys['ArrowRight']) {
+                    currentPlayerObj.angle = Math.max(10, currentPlayerObj.angle - 2);
+                }
+            }
+            
+            // Power charging - PLAYER 1 ONLY
+            if (game.currentPlayer === 1 && currentPlayerObj.charging && !projectile) {
+                currentPlayerObj.power = Math.min(100, currentPlayerObj.power + 2);
+            }
+            
+            updateProjectile();
+            updateExplosions();
+        }
+
+        function drawTerrain() {
+            ctx.fillStyle = '#2d5016';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            for (let point of terrain) {
+                ctx.lineTo(point.x, point.y);
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Grass top
+            ctx.strokeStyle = '#4a7c1f';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, terrain[0].y);
+            for (let point of terrain) {
+                ctx.lineTo(point.x, point.y);
+            }
+            ctx.stroke();
+        }
+
+        function drawPlayer(player, isActive) {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            // Rotate based on ground slope (negate to get correct tilt direction)
+            ctx.rotate(-player.groundAngle * Math.PI / 180);
+            
+            // Vehicle body
+            ctx.fillStyle = player.vehicleColor;
+            ctx.beginPath();
+            ctx.roundRect(-25, -10, 50, 25, 5);
+            ctx.fill();
+            
+            // Wheels
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-15, 20, 8, 0, Math.PI * 2);
+            ctx.arc(15, 20, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Character (cute blob)
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.ellipse(0, -25, 12, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Eyes
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-5, -27, 3, 0, Math.PI * 2);
+            ctx.arc(5, -27, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(-5, -27, 1.5, 0, Math.PI * 2);
+            ctx.arc(5, -27, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Gun barrel
+            if (isActive && !projectile) {
+                // In rotated canvas, just use player.angle directly
+                const barrelAngleRad = (player.angle * Math.PI) / 180;
+                const barrelLength = 35;
+                ctx.strokeStyle = player.vehicleColor;
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(0, -15);
+                ctx.lineTo(Math.cos(barrelAngleRad) * barrelLength, -Math.sin(barrelAngleRad) * barrelLength - 15);
+                ctx.stroke();
+                
+                // Angle indicator (show world angle, what barrel is actually pointing at)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '12px Poppins';
+                const worldAngle = player.angle + player.groundAngle;
+                ctx.fillText(`${Math.round(worldAngle)}°`, -15, -45);
+            }
+            
+            ctx.restore();
+            
+            // Health bar (draw outside rotation, bottom corner)
+            const barWidth = 60;
+            const barHeight = 8;
+            const barX = player === player1 ? 10 : canvas.width - barWidth - 10;
+            const barY = canvas.height - 60;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+            
+            const healthWidth = (player.health / player.maxHealth) * barWidth;
+            ctx.fillStyle = player.health > 50 ? '#4ecdc4' : player.health > 25 ? '#f7b731' : '#ff6b6b';
+            ctx.fillRect(barX, barY, healthWidth, barHeight);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+            
+            // Fuel bar (below health bar)
+            const fuelBarY = barY + 10;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(barX, fuelBarY, barWidth, barHeight);
+            
+            const fuelWidth = (player.fuel / player.maxFuel) * barWidth;
+            ctx.fillStyle = player.fuel > 50 ? '#f7b731' : player.fuel > 25 ? '#ff9f43' : '#ee5a6f';
+            ctx.fillRect(barX, fuelBarY, fuelWidth, barHeight);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, fuelBarY, barWidth, barHeight);
+        }
+
+        function drawPowerBar(player) {
+            if (!player.charging || projectile) return;
+            
+            const barWidth = 100;
+            const barHeight = 15;
+            const barX = player.x - barWidth / 2;
+            const barY = player.y + 40;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+            
+            const powerWidth = (player.power / 100) * barWidth;
+            const gradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
+            gradient.addColorStop(0, '#4ecdc4');
+            gradient.addColorStop(1, '#667eea');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(barX, barY, powerWidth, barHeight);
+            
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Poppins';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${Math.round(player.power)}%`, player.x, barY + 12);
+        }
+
+        function drawProjectile() {
+            if (!projectile) return;
+            
+            // Trail
+            ctx.strokeStyle = 'rgba(255, 200, 100, 0.5)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            for (let i = 0; i < projectile.trail.length; i++) {
+                const point = projectile.trail[i];
+                if (i === 0) ctx.moveTo(point.x, point.y);
+                else ctx.lineTo(point.x, point.y);
+            }
+            ctx.stroke();
+            
+            // Projectile
+            ctx.fillStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.arc(projectile.x, projectile.y, projectile.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#ff9900';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawExplosions() {
+            explosionParticles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function draw() {
+            // Sky gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#2d3561');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            drawTerrain();
+            
+            const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+            
+            drawPlayer(player1, game.currentPlayer === 1);
+            drawPlayer(player2, game.currentPlayer === 2);
+            
+            drawPowerBar(currentPlayerObj);
+            drawProjectile();
+            drawExplosions();
+            
+            // Player labels
+            ctx.fillStyle = player1.color;
+            ctx.font = 'bold 14px Poppins';
+            ctx.textAlign = 'center';
+            ctx.fillText('P1', player1.x, player1.y + 60);
+            
+            ctx.fillStyle = player2.color;
+            ctx.fillText('P2', player2.x, player2.y + 60);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize terrain on load
+        initTerrain();
+        gameLoop();
+    </script>
+</body>
+</html>

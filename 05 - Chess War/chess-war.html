@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Chess War</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            padding: 20px;
+            align-items: center;
+            border: 4px solid #ffd700;
+            background: #2d2d44;
+            max-width: 1300px;
+        }
+
+        #gameView {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+        }
+
+        #gameTitle {
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            margin-bottom: 10px;
+        }
+
+        #gameCanvas {
+            display: block;
+            background: #2d2d44;
+            cursor: pointer;
+        }
+
+        .player2 {
+            opacity: 0.7;
+            pointer-events: none;
+            display: none;
+        }
+
+        .player2 h2::after {
+            content: " 🤖";
+            font-size: 20px;
+        }
+
+        #uiPanel {
+            display: flex;
+            gap: 40px;
+            background: transparent;
+            padding: 15px 0 0 0;
+            border-radius: 0;
+            border: none;
+            border-top: 2px solid #ffd700;
+            width: 100%;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .playerInfo {
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            text-align: center;
+            align-items: center;
+        }
+
+        .playerInfo h2 {
+            font-size: 14px;
+            margin-bottom: 0;
+            color: #ffd700;
+            white-space: nowrap;
+            order: 1;
+        }
+
+        .player1 h2 {
+            color: #4a90e2;
+        }
+
+        .player2 h2 {
+            color: #e24a4a;
+        }
+
+        .coins {
+            font-size: 13px;
+            color: #ffd700;
+            white-space: nowrap;
+            order: 2;
+        }
+
+        .shop {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;            order: 4;        }
+
+        .shop {
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+        }
+
+        .pieceButton {
+            padding: 8px 10px;
+            border: 2px solid #555;
+            border-radius: 4px;
+            background: #333;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            min-width: 50px;
+            font-weight: bold;
+        }
+
+        .pieceButton span:first-child {
+            font-size: 28px;
+            display: block;
+            line-height: 1;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+        }
+
+        .pieceButton span:last-child {
+            font-size: 12px;
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .pieceButton:hover:not(:disabled) {
+            background: #444;
+            border-color: #ffd700;
+            transform: scale(1.08);
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+        }
+
+        .pieceButton:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .pieceButton.selected {
+            background: #ffd700;
+            color: #000;
+            border-color: #ffd700;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+        }
+
+        .pieceButton.selected span:first-child {
+            color: #000;
+            text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+        }
+
+        .pieceButton.selected span:last-child {
+            color: #000;
+        }
+
+        .cooldown {
+            font-size: 10px;
+            color: #ff6b6b;
+            order: 3;
+            display: none;
+        }
+
+        #gameStats {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 14px;
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+
+        #turnDisplay {
+            font-weight: bold;
+        }
+
+        #cooldownDisplay {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 6px 12px;
+            border-radius: 5px;
+            border: 1px solid #ffd700;
+        }
+
+        #cooldownBar {
+            width: 80px;
+            height: 6px;
+            background: #444;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        #cooldownBarFill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #4ade80, #fbbf24);
+            border-radius: 3px;
+            transition: width 0.1s linear;
+        }
+
+        #cooldownText {
+            font-size: 12px;
+            min-width: 30px;
+            display: none;
+        }
+
+        #instructions {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 800px;
+            text-align: center;
+            font-size: 14px;
+            line-height: 1.6;
+            display: none;
+        }
+
+        .stats {
+            font-size: 11px;
+            color: #aaa;
+            margin-top: 3px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1 id="gameTitle">⚔️ CHESS WAR ⚔️</h1>
+        
+        <div id="gameStats">
+            <div id="turnDisplay">Turn: <span id="turnCount">0</span></div>
+            <div id="cooldownDisplay">
+                ⏱️ 
+                <div id="cooldownBar"><div id="cooldownBarFill"></div></div>
+                <span id="cooldownText">4.0s</span>
+            </div>
+        </div>
+        
+        <div id="gameView">
+            <canvas id="gameCanvas" width="1100" height="700"></canvas>
+        </div>
+        
+        <div id="uiPanel">
+            <div class="playerInfo player1">
+                <h2>👑 P1</h2>
+                <div class="coins">💰 <span id="p1Coins">50</span></div>
+                <div class="cooldown" id="p1Cooldown"></div>
+                <div class="shop">
+                    <button class="pieceButton" data-piece="pawn" data-player="1">
+                        <span>♟</span>
+                        <span>10💰</span>
+                    </button>
+                    
+                    <button class="pieceButton" data-piece="bishop" data-player="1">
+                        <span>♗</span>
+                        <span>30💰</span>
+                    </button>
+                    
+                    <button class="pieceButton" data-piece="rook" data-player="1">
+                        <span>♜</span>
+                        <span>50💰</span>
+                    </button>
+                    
+                    <button class="pieceButton" data-piece="knight" data-player="1">
+                        <span>♞</span>
+                        <span>70💰</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="playerInfo player2">
+                <h2>👑 P2 🤖</h2>
+                <div class="coins">💰 <span id="p2Coins">50</span></div>
+                <div class="cooldown" id="p2Cooldown"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const BOARD_SIZE = 8;
+        const TILE_WIDTH = 130;
+        const TILE_HEIGHT = 65;
+        const PIECE_SCALE = 70;
+        const ACTION_COOLDOWN = 4000; // 4 seconds
+        const BUYING_COOLDOWN = 4000; // 4 seconds
+
+        // Piece costs and stats
+        const PIECE_DATA = {
+            pawn: { cost: 10, health: 3, damage: 1, moveRange: 1, symbol: '♟' },
+            bishop: { cost: 30, health: 5, damage: 2, moveRange: 3, symbol: '♗' },
+            rook: { cost: 50, health: 10, damage: 1, moveRange: 4, symbol: '♜' },
+            knight: { cost: 70, health: 5, damage: 4, moveRange: 1, symbol: '♞' },
+            king: { cost: 0, health: 20, damage: 0, moveRange: 0, symbol: '♚' }
+        };
+
+        // Game state
+        const gameState = {
+            board: Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null)),
+            pieces: [],
+            players: [
+                { id: 1, coins: 50, color: '#4a90e2' },
+                { id: 2, coins: 50, color: '#e24a4a' }
+            ],
+            selectedPieceType: null,
+            selectedPlayer: null,
+            gameStartTime: Date.now(),
+            turnCount: 0,
+            lastTurnTime: Date.now()
+        };
+
+        // Piece class
+        class Piece {
+            constructor(type, player, row, col) {
+                this.type = type;
+                this.player = player;
+                this.row = row;
+                this.col = col;
+                this.health = PIECE_DATA[type].health;
+                this.maxHealth = PIECE_DATA[type].health;
+                this.damage = PIECE_DATA[type].damage;
+                this.moveRange = PIECE_DATA[type].moveRange;
+                this.lastActionTurn = gameState.turnCount;
+                this.id = Math.random();
+                this.hitTime = 0;
+                this.fadeOut = false;
+                this.fadeOutTime = 0;
+                
+                // Animation states
+                this.isMoving = false;
+                this.moveStartTime = 0;
+                this.moveDuration = 600; // 600ms movement animation
+                this.targetRow = row;
+                this.targetCol = col;
+                
+                // Attack cooldown - independent from movement
+                this.lastAttackTime = Date.now();
+                this.attackCooldown = 1000; // 1 second
+            }
+            
+            canAttack() {
+                return Date.now() - this.lastAttackTime >= this.attackCooldown;
+            }
+
+            canAct() {
+                return gameState.turnCount > this.lastActionTurn;
+            }
+
+            update() {
+                if (!this.canAct()) return;
+
+                if (this.type === 'king') return; // Kings don't move
+
+                const enemy = this.findTarget();
+                
+                if (enemy) {
+                    const distance = Math.abs(this.row - enemy.row) + Math.abs(this.col - enemy.col);
+                    
+                    // Check if adjacent
+                    if (distance === 1 || (distance === Math.sqrt(2) && this.isAdjacent(enemy))) {
+                        // Don't move, just prepare for attack
+                    } else {
+                        this.moveToward(enemy);
+                    }
+                }
+
+                this.lastActionTurn = gameState.turnCount;
+            }
+            
+            updateAttack() {
+                // Separate attack update - runs independently of turn system
+                if (!this.canAttack() || this.health <= 0) return;
+                
+                if (this.type === 'king') return; // Kings don't attack
+                
+                const enemy = this.findTarget();
+                if (!enemy) return;
+                
+                const distance = Math.abs(this.row - enemy.row) + Math.abs(this.col - enemy.col);
+                
+                // Check if adjacent and can attack
+                if (distance === 1 || (distance === Math.sqrt(2) && this.isAdjacent(enemy))) {
+                    this.attack(enemy);
+                    this.lastAttackTime = Date.now();
+                }
+            }
+
+            isAdjacent(other) {
+                const dr = Math.abs(this.row - other.row);
+                const dc = Math.abs(this.col - other.col);
+                return dr <= 1 && dc <= 1 && (dr + dc > 0);
+            }
+
+            findTarget() {
+                const enemies = gameState.pieces.filter(p => p.player !== this.player && p.health > 0);
+                if (enemies.length === 0) return null;
+
+                if (this.type === 'pawn') {
+                    // Find nearest enemy
+                    return enemies.reduce((nearest, enemy) => {
+                        const dist = Math.abs(this.row - enemy.row) + Math.abs(this.col - enemy.col);
+                        const nearestDist = Math.abs(this.row - nearest.row) + Math.abs(this.col - nearest.col);
+                        return dist < nearestDist ? enemy : nearest;
+                    });
+                } else if (this.type === 'bishop') {
+                    // Prefers king but attacks enemies on the way
+                    const king = enemies.find(e => e.type === 'king');
+                    const enemiesOnPath = enemies.filter(e => this.isOnDiagonal(e));
+                    return enemiesOnPath.length > 0 ? enemiesOnPath[0] : king || enemies[0];
+                } else if (this.type === 'knight' || this.type === 'rook') {
+                    return enemies[0];
+                }
+
+                return enemies[0];
+            }
+
+            isOnDiagonal(other) {
+                return Math.abs(this.row - other.row) === Math.abs(this.col - other.col);
+            }
+
+            moveToward(target) {
+                let bestMove = null;
+                let bestDist = Infinity;
+
+                const moves = this.getPossibleMoves();
+                
+                for (const move of moves) {
+                    const dist = Math.abs(move.row - target.row) + Math.abs(move.col - target.col);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestMove = move;
+                    }
+                }
+
+                if (bestMove) {
+                    gameState.board[this.row][this.col] = null;
+                    this.targetRow = bestMove.row;
+                    this.targetCol = bestMove.col;
+                    this.isMoving = true;
+                    this.moveStartTime = Date.now();
+                    // Update board immediately for collision detection
+                    gameState.board[bestMove.row][bestMove.col] = this;
+                }
+            }
+            
+            updateAnimation() {
+                // Update movement animation
+                if (this.isMoving) {
+                    const elapsed = Date.now() - this.moveStartTime;
+                    if (elapsed >= this.moveDuration) {
+                        // Movement complete
+                        this.row = this.targetRow;
+                        this.col = this.targetCol;
+                        this.isMoving = false;
+                    }
+                }
+            }
+            
+            getDisplayPosition() {
+                if (this.isMoving) {
+                    const elapsed = Date.now() - this.moveStartTime;
+                    const progress = Math.min(elapsed / this.moveDuration, 1);
+                    
+                    // Smooth easing (ease-out cubic)
+                    const easeProgress = 1 - Math.pow(1 - progress, 3);
+                    
+                    return {
+                        row: this.row + (this.targetRow - this.row) * easeProgress,
+                        col: this.col + (this.targetCol - this.col) * easeProgress
+                    };
+                }
+                return { row: this.row, col: this.col };
+            }
+
+            getPossibleMoves() {
+                const moves = [];
+
+                if (this.type === 'pawn') {
+                    const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                    for (const [dr, dc] of directions) {
+                        const newRow = this.row + dr;
+                        const newCol = this.col + dc;
+                        if (this.isValidPosition(newRow, newCol) && !gameState.board[newRow][newCol]) {
+                            moves.push({ row: newRow, col: newCol });
+                        }
+                    }
+                } else if (this.type === 'bishop') {
+                    const directions = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+                    for (const [dr, dc] of directions) {
+                        for (let i = 1; i <= this.moveRange; i++) {
+                            const newRow = this.row + dr * i;
+                            const newCol = this.col + dc * i;
+                            if (!this.isValidPosition(newRow, newCol)) break;
+                            if (gameState.board[newRow][newCol]) break;
+                            moves.push({ row: newRow, col: newCol });
+                        }
+                    }
+                } else if (this.type === 'rook') {
+                    const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                    for (const [dr, dc] of directions) {
+                        for (let i = 1; i <= this.moveRange; i++) {
+                            const newRow = this.row + dr * i;
+                            const newCol = this.col + dc * i;
+                            if (!this.isValidPosition(newRow, newCol)) break;
+                            if (gameState.board[newRow][newCol]) break;
+                            moves.push({ row: newRow, col: newCol });
+                        }
+                    }
+                } else if (this.type === 'knight') {
+                    const knightMoves = [
+                        [2, 1], [2, -1], [-2, 1], [-2, -1],
+                        [1, 2], [1, -2], [-1, 2], [-1, -2]
+                    ];
+                    for (const [dr, dc] of knightMoves) {
+                        const newRow = this.row + dr;
+                        const newCol = this.col + dc;
+                        if (this.isValidPosition(newRow, newCol) && !gameState.board[newRow][newCol]) {
+                            moves.push({ row: newRow, col: newCol });
+                        }
+                    }
+                }
+
+                return moves;
+            }
+
+            isValidPosition(row, col) {
+                return row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE;
+            }
+
+            attack(enemy) {
+                enemy.health -= this.damage;
+                enemy.hitTime = Date.now(); // Trigger hit effect
+                
+                if (enemy.health <= 0) {
+                    enemy.fadeOut = true;
+                    enemy.fadeOutTime = Date.now();
+                    this.removePiece(enemy);
+                    // Award coins
+                    const player = gameState.players[this.player - 1];
+                    const coinReward = enemy.type === 'king' ? 0 : (PIECE_DATA[enemy.type].cost / 2);
+                    player.coins += coinReward;
+                }
+            }
+
+            removePiece(piece) {
+                gameState.board[piece.row][piece.col] = null;
+                const index = gameState.pieces.indexOf(piece);
+                if (index > -1) {
+                    gameState.pieces.splice(index, 1);
+                }
+
+                // Check for game over
+                if (piece.type === 'king') {
+                    setTimeout(() => {
+                        alert(`Player ${this.player} wins! The enemy king has fallen!`);
+                        location.reload();
+                    }, 100);
+                }
+            }
+        }
+
+        // Initialize game
+        function initGame() {
+            // Place Player 2's king at (0, 4)
+            const king2 = new Piece('king', 2, 0, 4);
+            gameState.pieces.push(king2);
+            gameState.board[0][4] = king2;
+
+            // Place Player 1's king at (7, 4)
+            const king1 = new Piece('king', 1, 7, 4);
+            gameState.pieces.push(king1);
+            gameState.board[7][4] = king1;
+        }
+
+        // Convert board coordinates to isometric screen coordinates
+        function boardToScreen(row, col) {
+            const x = (col - row) * (TILE_WIDTH / 2) + canvas.width / 2;
+            const y = (col + row) * (TILE_HEIGHT / 2) + 80;
+            return { x, y };
+        }
+
+        // Convert screen coordinates to board coordinates
+        function screenToBoard(screenX, screenY) {
+            const offsetX = screenX - canvas.width / 2;
+            const offsetY = screenY - 80;
+            
+            const col = (offsetX / (TILE_WIDTH / 2) + offsetY / (TILE_HEIGHT / 2)) / 2;
+            const row = (offsetY / (TILE_HEIGHT / 2) - offsetX / (TILE_WIDTH / 2)) / 2;
+            
+            return {
+                row: Math.floor(row),
+                col: Math.floor(col)
+            };
+        }
+
+        // Draw highlighted rows for piece placement
+        function drawHighlightedRows() {
+            if (!gameState.selectedPieceType || !gameState.selectedPlayer) return;
+            
+            const validRows = gameState.selectedPlayer === 1 ? [6, 7] : [0, 1];
+            
+            for (let row of validRows) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    const { x, y } = boardToScreen(row, col);
+                    
+                    // Draw highlighted tile
+                    ctx.save();
+                    ctx.translate(x, y);
+                    
+                    ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(TILE_WIDTH / 2, TILE_HEIGHT / 2);
+                    ctx.lineTo(0, TILE_HEIGHT);
+                    ctx.lineTo(-TILE_WIDTH / 2, TILE_HEIGHT / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = '#ffd700';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Draw the isometric board
+        function drawBoard() {
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    const { x, y } = boardToScreen(row, col);
+                    
+                    // Draw tile
+                    ctx.save();
+                    ctx.translate(x, y);
+                    
+                    const isLight = (row + col) % 2 === 0;
+                    ctx.fillStyle = isLight ? '#d4a574' : '#8b6f47';
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(TILE_WIDTH / 2, TILE_HEIGHT / 2);
+                    ctx.lineTo(0, TILE_HEIGHT);
+                    ctx.lineTo(-TILE_WIDTH / 2, TILE_HEIGHT / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = '#5a4a30';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Draw pieces
+        function drawPieces() {
+            // Sort pieces by y-coordinate for proper layering
+            const sortedPieces = [...gameState.pieces].sort((a, b) => {
+                const posA = boardToScreen(a.row, a.col);
+                const posB = boardToScreen(b.row, b.col);
+                return posA.y - posB.y;
+            });
+
+            for (const piece of sortedPieces) {
+                if (piece.health <= 0 && !piece.fadeOut) continue;
+
+                const displayPos = piece.getDisplayPosition();
+                const { x, y } = boardToScreen(displayPos.row, displayPos.col);
+                
+                // Calculate fade out effect
+                let alpha = 1;
+                if (piece.fadeOut) {
+                    const fadeOutDuration = 500; // 500ms fade out
+                    const fadeProgress = Math.min((Date.now() - piece.fadeOutTime) / fadeOutDuration, 1);
+                    alpha = 1 - fadeProgress;
+                }
+                
+                // Calculate health percentage
+                const healthPercent = piece.health / piece.maxHealth;
+                
+                // Draw piece shadow on the tile
+                ctx.fillStyle = `rgba(0, 0, 0, ${0.4 * alpha})`;
+                ctx.beginPath();
+                ctx.ellipse(x, y + 30, TILE_WIDTH / 4.5, TILE_HEIGHT / 4.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Get piece color and blend with grey based on health
+                const playerColor = gameState.players[piece.player - 1].color;
+                const finalColor = healthPercent >= 1 ? playerColor : interpolateColor(playerColor, '#808080', 1 - healthPercent);
+
+                // Calculate hit effect (scale animation)
+                const hitDuration = 200; // 200ms hit effect
+                const timeSinceHit = Date.now() - piece.hitTime;
+                let scale = 1;
+                let hitFlash = 0;
+                if (timeSinceHit < hitDuration) {
+                    const hitProgress = timeSinceHit / hitDuration;
+                    scale = 1 + (0.3 * (1 - hitProgress)); // Stronger scale effect
+                    hitFlash = (1 - hitProgress) * 0.5; // Red flash effect
+                }
+
+                // Draw piece standing on the tile
+                ctx.fillStyle = finalColor;
+                ctx.font = `${PIECE_SCALE * scale}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.globalAlpha = alpha;
+                
+                // Add hit flash effect (red overlay)
+                if (hitFlash > 0) {
+                    ctx.fillStyle = `rgba(255, 100, 100, ${hitFlash})`;
+                    ctx.fillRect(x - PIECE_SCALE * 0.5, y - PIECE_SCALE * 0.5, PIECE_SCALE, PIECE_SCALE);
+                }
+                
+                // Add glow effect
+                ctx.fillStyle = finalColor;
+                ctx.shadowColor = finalColor;
+                ctx.shadowBlur = 15;
+                ctx.fillText(PIECE_DATA[piece.type].symbol, x, y + 10);
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // Helper function to interpolate between two colors
+        function interpolateColor(color1, color2, percent) {
+            // Parse colors
+            const c1 = parseInt(color1.slice(1), 16);
+            const c2 = parseInt(color2.slice(1), 16);
+            
+            const r1 = (c1 >> 16) & 255;
+            const g1 = (c1 >> 8) & 255;
+            const b1 = c1 & 255;
+            
+            const r2 = (c2 >> 16) & 255;
+            const g2 = (c2 >> 8) & 255;
+            const b2 = c2 & 255;
+            
+            const r = Math.round(r1 + (r2 - r1) * percent);
+            const g = Math.round(g1 + (g2 - g1) * percent);
+            const b = Math.round(b1 + (b2 - b1) * percent);
+            
+            return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Main render function
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBoard();
+            drawHighlightedRows();
+            drawPieces();
+        }
+
+        // AI for Player 2
+        function aiUpdate() {
+            const player2 = gameState.players[1];
+
+            // Count AI's existing pieces by type
+            const aiPieces = gameState.pieces.filter(p => p.player === 2 && p.health > 0);
+            const pieceCounts = {
+                pawn: aiPieces.filter(p => p.type === 'pawn').length,
+                bishop: aiPieces.filter(p => p.type === 'bishop').length,
+                rook: aiPieces.filter(p => p.type === 'rook').length,
+                knight: aiPieces.filter(p => p.type === 'knight').length
+            };
+
+            // Flexible AI strategy based on game state
+            let pieceToBuy = null;
+            const rand = Math.random();
+
+            // If low on pieces, focus on cheap pieces
+            if (aiPieces.length < 2) {
+                if (player2.coins >= 10) pieceToBuy = 'pawn';
+            }
+            // If have decent economy, diversify
+            else if (player2.coins >= 70) {
+                // Randomly decide: 50% knight, 30% rook, 20% bishop
+                if (rand < 0.5) pieceToBuy = 'knight';
+                else if (rand < 0.8) pieceToBuy = 'rook';
+                else pieceToBuy = 'bishop';
+            } 
+            else if (player2.coins >= 50) {
+                // Can afford rook: 40% rook, 40% bishop, 20% pawn
+                if (rand < 0.4) pieceToBuy = 'rook';
+                else if (rand < 0.8) pieceToBuy = 'bishop';
+                else pieceToBuy = 'pawn';
+            } 
+            else if (player2.coins >= 30) {
+                // Can afford bishop: 50% bishop, 50% pawn
+                if (rand < 0.5) pieceToBuy = 'bishop';
+                else pieceToBuy = 'pawn';
+            } 
+            else if (player2.coins >= 10) {
+                pieceToBuy = 'pawn';
+            }
+
+            if (pieceToBuy) {
+                // Find available spot in rows 0-1
+                for (let row = 0; row <= 1; row++) {
+                    for (let col = 0; col < BOARD_SIZE; col++) {
+                        if (!gameState.board[row][col]) {
+                            const cost = PIECE_DATA[pieceToBuy].cost;
+                            player2.coins -= cost;
+                            
+                            const piece = new Piece(pieceToBuy, 2, row, col);
+                            gameState.pieces.push(piece);
+                            gameState.board[row][col] = piece;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update game state
+        function update() {
+            // Increment turn count every 4 seconds
+            const now = Date.now();
+            if (now - gameState.lastTurnTime >= ACTION_COOLDOWN) {
+                gameState.turnCount++;
+                gameState.lastTurnTime = now;
+            }
+
+            for (const piece of gameState.pieces) {
+                piece.updateAnimation();
+                if (piece.health > 0) {
+                    piece.update();
+                    piece.updateAttack();
+                }
+            }
+            
+            // Run AI for Player 2
+            aiUpdate();
+        }
+
+        // Handle canvas click
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const screenX = e.clientX - rect.left;
+            const screenY = e.clientY - rect.top;
+            
+            const { row, col } = screenToBoard(screenX, screenY);
+            
+            if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
+
+            if (gameState.selectedPieceType && gameState.selectedPlayer) {
+                placePiece(row, col);
+            }
+        });
+
+        // Handle piece selection
+        document.querySelectorAll('.pieceButton').forEach(button => {
+            button.addEventListener('click', () => {
+                const pieceType = button.dataset.piece;
+                const player = parseInt(button.dataset.player);
+                const playerData = gameState.players[player - 1];
+                const cost = PIECE_DATA[pieceType].cost;
+
+                // Check cooldown
+                if (Date.now() - playerData.lastBuyTime < BUYING_COOLDOWN) {
+                    return;
+                }
+
+                // Check if player has enough coins
+                if (playerData.coins < cost) {
+                    return;
+                }
+
+                // Select piece
+                document.querySelectorAll('.pieceButton').forEach(b => b.classList.remove('selected'));
+                button.classList.add('selected');
+                
+                gameState.selectedPieceType = pieceType;
+                gameState.selectedPlayer = player;
+            });
+        });
+
+        // Place piece on board
+        function placePiece(row, col) {
+            const player = gameState.selectedPlayer;
+            const pieceType = gameState.selectedPieceType;
+            const playerData = gameState.players[player - 1];
+            const cost = PIECE_DATA[pieceType].cost;
+
+            // Check if position is valid for this player
+            const validRows = player === 1 ? [6, 7] : [0, 1];
+            if (!validRows.includes(row)) {
+                return;
+            }
+
+            // Check if position is occupied
+            if (gameState.board[row][col]) {
+                return;
+            }
+
+            // Deduct coins
+            playerData.coins -= cost;
+
+            // Create and place piece
+            const piece = new Piece(pieceType, player, row, col);
+            gameState.pieces.push(piece);
+            gameState.board[row][col] = piece;
+
+            // Deselect
+            document.querySelectorAll('.pieceButton').forEach(b => b.classList.remove('selected'));
+            gameState.selectedPieceType = null;
+            gameState.selectedPlayer = null;
+
+            updateUI();
+        }
+
+        // Update UI
+        function updateUI() {
+            document.getElementById('p1Coins').textContent = gameState.players[0].coins;
+            document.getElementById('p2Coins').textContent = gameState.players[1].coins;
+            
+            // Update turn count
+            document.getElementById('turnCount').textContent = gameState.turnCount;
+            
+            // Calculate and display action cooldown
+            const timeSinceLastTurn = Date.now() - gameState.lastTurnTime;
+            const cooldownRemaining = Math.max(0, ACTION_COOLDOWN - timeSinceLastTurn);
+            const cooldownPercent = (cooldownRemaining / ACTION_COOLDOWN) * 100;
+            
+            const cooldownBarFill = document.getElementById('cooldownBarFill');
+            cooldownBarFill.style.width = cooldownPercent + '%';
+            
+            const cooldownText = document.getElementById('cooldownText');
+            cooldownText.textContent = (cooldownRemaining / 1000).toFixed(1) + 's';
+
+            // Update button states
+            document.querySelectorAll('.pieceButton').forEach(button => {
+                const player = parseInt(button.dataset.player);
+                const pieceType = button.dataset.piece;
+                const playerData = gameState.players[player - 1];
+                const cost = PIECE_DATA[pieceType].cost;
+                
+                button.disabled = playerData.coins < cost;
+            });
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            render();
+            updateUI();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>
