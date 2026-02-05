@@ -378,8 +378,8 @@
 
     <div id="gamesContainer">
         <!-- SMOT Game Card -->
-        <div class="gameCard" data-category="action survival">
-            <div style="position: relative;" onclick="recordGamePlay('smot'); window.location.href='01 - So many of them/SMOTgame.html'">
+        <div class="gameCard" data-category="action survival" data-game-id="smot">
+            <div style="position: relative;" onclick="playGame('smot', '01 - So many of them/SMOTgame.html')">
                 <img src="01 - So many of them/img/SMOT-thumbnail.jpg" alt="So Many Of Them" class="gameThumbnail">
                 <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
             </div>
@@ -390,7 +390,7 @@
                     <span class="gameTag">Survival</span>
                     <span class="gameTag">Action</span>
                 </div>
-                <button class="playButton" onclick="recordGamePlay('smot'); window.location.href='01 - So many of them/SMOTgame.html'">PLAY NOW</button>
+                <button class="playButton" onclick="playGame('smot', '01 - So many of them/SMOTgame.html')">PLAY NOW</button>
             </div>
         </div>
 
@@ -412,8 +412,8 @@
         </div>
 
         <!-- Space Pong Game Card -->
-        <div class="gameCard" data-category="action">
-            <div style="position: relative;" onclick="recordGamePlay('spacepong'); window.location.href='03 - Space Pong/spacepong.html'">
+        <div class="gameCard" data-category="action" data-game-id="spacepong">
+            <div style="position: relative;" onclick="playGame('spacepong', '03 - Space Pong/spacepong.html')">
                 <img src="03 - Space Pong/img/thumbnail.png" alt="Space Pong" class="gameThumbnail">
                 <div class="playCountBadge">👁️ <span class="playCount">0</span></div>
             </div>
@@ -423,13 +423,13 @@
                 <div class="gameTagsContainer">
                     <span class="gameTag">Action</span>
                 </div>
-                <button class="playButton" onclick="recordGamePlay('spacepong'); window.location.href='03 - Space Pong/spacepong.html'">PLAY NOW</button>
+                <button class="playButton" onclick="playGame('spacepong', '03 - Space Pong/spacepong.html')">PLAY NOW</button>
             </div>
         </div>
 
         <!-- Gun Rider Game Card -->
-        <div class="gameCard" data-category="action">
-            <div style="position: relative;" onclick="recordGamePlay('gunrider'); window.location.href='04 - Gun Rider/gunrider.html'">
+        <div class="gameCard" data-category="action" data-game-id="gunrider">
+            <div style="position: relative;" onclick="playGame('gunrider', '04 - Gun Rider/gunrider.html')">
                 <div style="width: 100%; height: 220px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%); display: flex; align-items: center; justify-content: center; position: relative;">
                     <div style="text-align: center; color: rgba(78, 205, 196, 0.8); font-size: 60px;">🤠</div>
                 </div>
@@ -445,8 +445,8 @@
         </div>
 
         <!-- Chess War Game Card -->
-        <div class="gameCard" data-category="strategy">
-            <div style="position: relative;" onclick="recordGamePlay('chesswar'); window.location.href='05 - Chess War/chess-war.html'">
+        <div class="gameCard" data-category="strategy" data-game-id="chesswar">
+            <div style="position: relative;" onclick="playGame('chesswar', '05 - Chess War/chess-war.html')">
                 <div style="width: 100%; height: 220px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%); display: flex; align-items: center; justify-content: center; position: relative;">
                     <div style="text-align: center; color: rgba(78, 205, 196, 0.8); font-size: 60px;">♟️</div>
                 </div>
@@ -458,7 +458,7 @@
                 <div class="gameTagsContainer">
                     <span class="gameTag">Strategy</span>
                 </div>
-                <button class="playButton" onclick="recordGamePlay('chesswar'); window.location.href='05 - Chess War/chess-war.html'">PLAY NOW</button>
+                <button class="playButton" onclick="playGame('chesswar', '05 - Chess War/chess-war.html')">PLAY NOW</button>
             </div>
         </div>
 
@@ -478,32 +478,83 @@
         </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
     <script>
-        // Load play counts on page load
-        function loadPlayCounts() {
-            const cards = document.querySelectorAll('.gameCard[data-category]');
-            cards.forEach(card => {
-                const gameId = card.dataset.gameId || getGameIdFromCard(card);
-                const playCount = localStorage.getItem(`game_plays_${gameId}`) || '0';
-                const playCountElement = card.querySelector('.playCount');
-                if (playCountElement) {
-                    playCountElement.textContent = playCount;
-                }
-            });
-        }
+        const firebaseConfig = {
+            apiKey: "AIzaSyDI4oTgZDCuKGBrTzlbOcxRNz4mQLvSH_8",
+            authDomain: "gameslord-f3fd4.firebaseapp.com",
+            projectId: "gameslord-f3fd4",
+            storageBucket: "gameslord-f3fd4.firebasestorage.app",
+            messagingSenderId: "637214003741",
+            appId: "1:637214003741:web:be6e6633b1bac24b102cf4",
+            measurementId: "G-ZJGJLDT7M9"
+        };
 
-        function getGameIdFromCard(card) {
-            if (card.querySelector('.playButton').onclick.toString().includes('smot')) {
-                return 'smot';
+        let db = null;
+        const playsCollectionName = 'gamePlays';
+
+        function initFirebase() {
+            const missingConfig = Object.values(firebaseConfig).some(value => String(value).startsWith('YOUR_'));
+            if (missingConfig) {
+                console.warn('Firebase config is missing. Replace placeholders to enable global play counts.');
+                return;
             }
-            return 'unknown';
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+        }
+        // Load play counts on page load
+        async function loadPlayCounts() {
+            const cards = document.querySelectorAll('.gameCard[data-category]');
+            const gameIds = Array.from(cards)
+                .map(card => card.dataset.gameId)
+                .filter(Boolean);
+
+            if (!db || gameIds.length === 0) {
+                return;
+            }
+
+            const uniqueGameIds = [...new Set(gameIds)];
+
+            await Promise.all(uniqueGameIds.map(async gameId => {
+                try {
+                    const docRef = db.collection(playsCollectionName).doc(gameId);
+                    const docSnap = await docRef.get();
+                    const count = docSnap.exists ? (docSnap.data().count || 0) : 0;
+                    document.querySelectorAll(`.gameCard[data-game-id="${gameId}"] .playCount`)
+                        .forEach(el => { el.textContent = count; });
+                } catch (error) {
+                    console.warn(`Failed to load play count for ${gameId}`, error);
+                }
+            }));
         }
 
         // Record game play
         function recordGamePlay(gameId) {
-            const key = `game_plays_${gameId}`;
-            const currentCount = parseInt(localStorage.getItem(key) || '0');
-            localStorage.setItem(key, currentCount + 1);
+            if (!db || !gameId) {
+                return Promise.resolve();
+            }
+            const docRef = db.collection(playsCollectionName).doc(gameId);
+            return docRef.set(
+                { count: firebase.firestore.FieldValue.increment(1) },
+                { merge: true }
+            );
+        }
+
+        function playGame(gameId, url) {
+            let navigated = false;
+            const navigate = () => {
+                if (navigated) {
+                    return;
+                }
+                navigated = true;
+                window.location.href = url;
+            };
+
+            recordGamePlay(gameId).then(navigate).catch(navigate);
+            setTimeout(navigate, 600);
         }
 
         // Category filter
@@ -527,7 +578,10 @@
         });
 
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', loadPlayCounts);
+        document.addEventListener('DOMContentLoaded', () => {
+            initFirebase();
+            loadPlayCounts();
+        });
     </script>
 </body>
 </html>
