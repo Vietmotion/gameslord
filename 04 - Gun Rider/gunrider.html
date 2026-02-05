@@ -360,7 +360,7 @@
             const direction = Math.random() < 0.5 ? -1 : 1;
             const strengthBias = Math.pow(Math.random(), 1.6); // bias toward lighter winds
             wind.target = direction * strengthBias * maxStrength;
-            wind.changeTimer = 6 + Math.random() * 6; // 6-12 seconds
+            wind.changeTimer = 15 + Math.random() * 15; // 15-30 seconds
         }
 
         function updateWind(dt = 1) {
