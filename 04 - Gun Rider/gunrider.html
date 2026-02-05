@@ -225,36 +225,48 @@
             top: 12px;
             left: 50%;
             transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            z-index: 5;
+        }
+
+        .turnTimerBox {
             background: rgba(26, 26, 46, 0.85);
             backdrop-filter: blur(10px);
-            padding: 8px 10px;
-            border-radius: 999px;
+            padding: 8px 16px;
+            border-radius: 12px;
             border: 1px solid rgba(78, 205, 196, 0.3);
             color: rgba(255, 255, 255, 0.9);
             font-size: 12px;
-            text-align: center;
-            z-index: 5;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .windIndicator {
-            display: inline-flex;
+            display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            background: rgba(78, 205, 196, 0.15);
+            border: 2px solid rgba(78, 205, 196, 0.4);
             font-weight: 600;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            color: #4ecdc4;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.2);
+        }
+
+        .windIcon {
+            font-size: 18px;
         }
 
         .windArrow {
-            font-size: 14px;
+            font-size: 16px;
             color: #4ecdc4;
+            min-width: 20px;
         }
 
         .turnDot {
@@ -309,13 +321,16 @@
                 <button onclick="location.reload()">Play Again</button>
             </div>
         </div>
-        <div id="controls" aria-label="Turn indicator">
-            <span id="turnDot" class="turnDot p1" title="Player 1's turn"></span>
-            <span id="turnTimer" class="turnTimer">12.0s</span>
-            <span id="windIndicator" class="windIndicator">
+        <div id="controls" aria-label="Game status indicators">
+            <div class="turnTimerBox">
+                <span id="turnDot" class="turnDot p1" title="Player 1's turn"></span>
+                <span id="turnTimer" class="turnTimer">12.0s</span>
+            </div>
+            <div id="windIndicator" class="windIndicator">
+                <span class="windIcon">💨</span>
                 <span id="windArrow" class="windArrow">→</span>
                 <span id="windValue">0.0</span>
-            </span>
+            </div>
         </div>
     </div>
 
