@@ -102,6 +102,11 @@ window.GameScores = {
             return leaderboard;
         } catch (error) {
             console.error('Error getting leaderboard:', error);
+            console.error('ERROR DETAILS:', error.code, error.message);
+            if (error.code === 'failed-precondition') {
+                console.error('⚠️ FIRESTORE INDEX REQUIRED! Go to Firebase Console → Firestore → Indexes');
+                console.error('Create composite index: scores collection → gameId (Ascending), score (Descending)');
+            }
             return [];
         }
     },
