@@ -1892,19 +1892,7 @@
                         } else {
                             document.getElementById('playerBestScore').textContent = '--';
                         }
-            const listEl = document.getElementById('leaderboardList');
-            
-            if (leaderboard.length === 0) {
-                listEl.innerHTML = '<li>No scores yet - be the first!</li>';
-            } else {
-                listEl.innerHTML = leaderboard.map((entry, index) => `
-                    <li>
-                        <span><span class="rank">#${index + 1}</span>${entry.playerName}</span>
-                        <span class="score">${entry.score} pts</span>
-                    </li>
-                `).join('');
-            }
-        }
+                    }
 
         // Main game loop
         function gameLoop() {
