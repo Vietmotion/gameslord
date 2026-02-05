@@ -251,6 +251,75 @@
             transform: translateY(-1px);
         }
 
+        .scoreDisplay {
+            background: rgba(78, 205, 196, 0.1);
+            border: 2px solid rgba(78, 205, 196, 0.4);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            max-width: 400px;
+        }
+
+        .scoreDisplay h3 {
+            color: #4ecdc4;
+            font-size: 18px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .scoreDisplay p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+            margin: 8px 0;
+        }
+
+        .leaderboardList {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+
+        .leaderboardList li {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            margin: 6px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+        }
+
+        .leaderboardList .rank {
+            color: #4ecdc4;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .leaderboardList .score {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .loginPrompt {
+            background: rgba(255, 193, 7, 0.1);
+            border: 2px solid rgba(255, 193, 7, 0.4);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .loginPrompt p {
+            color: rgba(255, 193, 7, 0.9);
+            font-size: 14px;
+            margin: 0;
+        }
+
         #stats {
             position: absolute;
             top: clamp(8px, 1.5vh, 15px);
@@ -335,6 +404,9 @@
                 <h1>🔥 SO MANY OF THEM</h1>
                 <p>Survive the waves of enemies!</p>
                 <p>Use Arrow Keys to move • Spacebar to attack • Pick up weapons!</p>
+                <div id="startHighScore" style="display: none; color: #4ecdc4; font-size: 16px; margin: 15px 0;">
+                    Your High Score: <span id="startHighScoreValue">0</span>
+                </div>
                 <button onclick="startGame()">START GAME</button>
             </div>
         </div>
@@ -342,6 +414,31 @@
             <div class="gameOverContent">
                 <h1>GAME OVER!</h1>
                 <p>Final Score: <span id="finalScore">0</span></p>
+                
+                <!-- Player's High Score -->
+                <div id="playerHighScoreDisplay" class="scoreDisplay" style="display: none;">
+                    <h3>🏆 Your High Score</h3>
+                    <p id="playerHighScore">0</p>
+                </div>
+
+                <!-- New High Score Message -->
+                <div id="newHighScoreMsg" style="display: none; color: #4ecdc4; font-size: 18px; margin: 10px 0; font-weight: 700;">
+                    🎉 NEW HIGH SCORE! 🎉
+                </div>
+
+                <!-- Login Prompt -->
+                <div id="loginPrompt" class="loginPrompt" style="display: none;">
+                    <p>Login to save your high score!</p>
+                </div>
+
+                <!-- World Leaderboard -->
+                <div id="leaderboardDisplay" class="scoreDisplay">
+                    <h3>🌍 World Top 5</h3>
+                    <ul class="leaderboardList" id="leaderboardList">
+                        <li>Loading...</li>
+                    </ul>
+                </div>
+
                 <button onclick="location.reload()">Play Again</button>
             </div>
         </div>
@@ -467,6 +564,21 @@
         let dailyHigh = parseInt(localStorage.getItem(todayKey), 10) || 0;
         const dailyHighEl = document.getElementById('dailyHighScore');
         if (dailyHighEl) dailyHighEl.textContent = dailyHigh;
+
+        // Load player's high score on page load
+        async function loadStartScreenHighScore() {
+            const GAME_ID = 'smot';
+            if (window.parent.GameScores && window.parent.GameScores.isLoggedIn()) {
+                const highScore = await window.parent.GameScores.getPlayerHighScore(GAME_ID);
+                if (highScore !== null) {
+                    document.getElementById('startHighScore').style.display = 'block';
+                    document.getElementById('startHighScoreValue').textContent = highScore;
+                }
+            }
+        }
+
+        // Load high score when page loads
+        window.addEventListener('load', loadStartScreenHighScore);
 
         function startGame() {
             // Record play count
@@ -1617,6 +1729,64 @@
             game.isRunning = false;
             document.getElementById('finalScore').textContent = game.score;
             document.getElementById('gameOverScreen').style.display = 'flex';
+            
+            // Handle high scores
+            handleGameOverScores();
+        }
+
+        async function handleGameOverScores() {
+            const finalScore = game.score;
+            const GAME_ID = 'smot';
+
+            // Load leaderboard
+            await loadLeaderboard(GAME_ID);
+
+            // Check if user is logged in
+            if (window.parent.GameScores && window.parent.GameScores.isLoggedIn()) {
+                // Get player's previous high score
+                const previousHigh = await window.parent.GameScores.getPlayerHighScore(GAME_ID);
+                
+                // Show player's high score display
+                document.getElementById('playerHighScoreDisplay').style.display = 'block';
+                
+                // Try to save the score
+                const result = await window.parent.GameScores.saveScore(GAME_ID, finalScore);
+                
+                if (result.success) {
+                    // New high score!
+                    document.getElementById('newHighScoreMsg').style.display = 'block';
+                    document.getElementById('playerHighScore').textContent = finalScore;
+                    // Reload leaderboard to show updated ranking
+                    await loadLeaderboard(GAME_ID);
+                } else {
+                    // Not a new high score, show previous best
+                    document.getElementById('playerHighScore').textContent = previousHigh || finalScore;
+                }
+            } else {
+                // Not logged in - show login prompt
+                document.getElementById('loginPrompt').style.display = 'block';
+            }
+        }
+
+        async function loadLeaderboard(gameId) {
+            if (!window.parent.GameScores) {
+                document.getElementById('leaderboardList').innerHTML = '<li>Score system unavailable</li>';
+                return;
+            }
+
+            const leaderboard = await window.parent.GameScores.getLeaderboard(gameId, 5);
+            const listEl = document.getElementById('leaderboardList');
+            
+            if (leaderboard.length === 0) {
+                listEl.innerHTML = '<li>No scores yet - be the first!</li>';
+            } else {
+                listEl.innerHTML = leaderboard.map((entry, index) => `
+                    <li>
+                        <span><span class="rank">#${index + 1}</span>${entry.playerName}</span>
+                        <span class="score">${entry.score} pts</span>
+                    </li>
+                `).join('');
+            }
         }
 
         // Main game loop
