@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Score System Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .score-box {
+            background: rgba(78, 205, 196, 0.1);
+            border: 2px solid #4ecdc4;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .leaderboard {
+            list-style: none;
+            padding: 0;
+        }
+        .leaderboard li {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .rank {
+            color: #4ecdc4;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 Game Score System Example</h1>
+    
+    <div class="score-box">
+        <h2>Your High Score</h2>
+        <p id="playerScore">Loading...</p>
+    </div>
+
+    <div class="score-box">
+        <h2>🏆 World Leaderboard - Top 5</h2>
+        <ul class="leaderboard" id="leaderboard">
+            <li>Loading...</li>
+        </ul>
+    </div>
+
+    <div class="score-box">
+        <h2>Test Score Submission</h2>
+        <p>Simulate getting a score in your game:</p>
+        <button onclick="submitRandomScore()">Submit Random Score</button>
+        <button onclick="submitHighScore()">Submit High Score (9999)</button>
+        <p id="result"></p>
+    </div>
+
+    <script>
+        const GAME_ID = 'smot'; // Change this to match your game
+
+        // Load scores when page loads
+        async function loadScores() {
+            if (!window.parent.GameScores) {
+                document.getElementById('playerScore').textContent = 'Error: GameScores API not found. Open from main site.';
+                return;
+            }
+
+            // Get player's high score
+            const playerHighScore = await window.parent.GameScores.getPlayerHighScore(GAME_ID);
+            document.getElementById('playerScore').textContent = 
+                playerHighScore !== null ? `${playerHighScore} points` : 'No score yet - play to set your first score!';
+
+            // Get leaderboard
+            const leaderboard = await window.parent.GameScores.getLeaderboard(GAME_ID, 5);
+            const leaderboardEl = document.getElementById('leaderboard');
+            
+            if (leaderboard.length === 0) {
+                leaderboardEl.innerHTML = '<li>No scores yet - be the first!</li>';
+            } else {
+                leaderboardEl.innerHTML = leaderboard.map((entry, index) => `
+                    <li>
+                        <span><span class="rank">#${index + 1}</span>${entry.playerName}</span>
+                        <strong>${entry.score} pts</strong>
+                    </li>
+                `).join('');
+            }
+        }
+
+        // Example: Submit a random score
+        async function submitRandomScore() {
+            if (!window.parent.GameScores) {
+                alert('GameScores API not available');
+                return;
+            }
+
+            if (!window.parent.GameScores.isLoggedIn()) {
+                alert('Please login first!');
+                return;
+            }
+
+            const score = Math.floor(Math.random() * 1000);
+            const result = await window.parent.GameScores.saveScore(GAME_ID, score);
+            
+            if (result.success) {
+                document.getElementById('result').textContent = `✅ New high score saved: ${score}!`;
+                document.getElementById('result').style.color = '#4ecdc4';
+                loadScores(); // Reload to show updated scores
+            } else {
+                document.getElementById('result').textContent = `❌ ${result.message || result.error}`;
+                document.getElementById('result').style.color = '#ff6b6b';
+            }
+        }
+
+        // Example: Submit a very high score
+        async function submitHighScore() {
+            if (!window.parent.GameScores) {
+                alert('GameScores API not available');
+                return;
+            }
+
+            if (!window.parent.GameScores.isLoggedIn()) {
+                alert('Please login first!');
+                return;
+            }
+
+            const score = 9999;
+            const result = await window.parent.GameScores.saveScore(GAME_ID, score);
+            
+            if (result.success) {
+                document.getElementById('result').textContent = `✅ New high score saved: ${score}!`;
+                document.getElementById('result').style.color = '#4ecdc4';
+                loadScores();
+            } else {
+                document.getElementById('result').textContent = `❌ ${result.message || result.error}`;
+                document.getElementById('result').style.color = '#ff6b6b';
+            }
+        }
+
+        // Load scores on page load
+        window.addEventListener('load', loadScores);
+    </script>
+
+    <hr style="margin: 40px 0; border-color: rgba(78, 205, 196, 0.3);">
+    
+    <h2>📝 How to integrate in your games:</h2>
+    <pre style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px; overflow-x: auto;">
+// 1. When game loads, display player's high score:
+const playerHighScore = await window.parent.GameScores.getPlayerHighScore('smot');
+console.log('Your best:', playerHighScore);
+
+// 2. When game loads, display leaderboard:
+const leaderboard = await window.parent.GameScores.getLeaderboard('smot', 5);
+console.log('Top 5:', leaderboard);
+
+// 3. When game ends, save the score:
+const finalScore = 1234; // Your game's score
+const result = await window.parent.GameScores.saveScore('smot', finalScore);
+if (result.success) {
+    console.log('New high score!');
+}
+
+// 4. Check if user is logged in:
+if (window.parent.GameScores.isLoggedIn()) {
+    // Show score features
+} else {
+    // Show "login to save scores" message
+}
+    </pre>
+</body>
+</html>

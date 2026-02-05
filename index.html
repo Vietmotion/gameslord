@@ -741,6 +741,103 @@
         // Event listeners
         document.getElementById('loginBtn').addEventListener('click', openAuthModal);
         document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+
+        // Global High Score API for games to use
+        window.GameScores = {
+            // Save a score (only if it's higher than current high score)
+            async saveScore(gameId, score, playerName = null) {
+                if (!auth.currentUser) {
+                    console.warn('User must be logged in to save scores');
+                    return { success: false, error: 'Not logged in' };
+                }
+
+                try {
+                    const userId = auth.currentUser.uid;
+                    const email = auth.currentUser.email;
+                    const displayName = playerName || email.split('@')[0];
+                    const docId = `${gameId}__${userId}`;
+                    const docRef = db.collection('scores').doc(docId);
+                    
+                    // Check if this is a new high score
+                    const existing = await docRef.get();
+                    if (existing.exists && existing.data().score >= score) {
+                        return { success: false, message: 'Not a high score' };
+                    }
+
+                    // Save the new high score
+                    await docRef.set({
+                        gameId: gameId,
+                        userId: userId,
+                        score: score,
+                        playerName: displayName,
+                        email: email,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    return { success: true, score: score };
+                } catch (error) {
+                    console.error('Error saving score:', error);
+                    return { success: false, error: error.message };
+                }
+            },
+
+            // Get player's high score for a game
+            async getPlayerHighScore(gameId) {
+                if (!auth.currentUser) {
+                    return null;
+                }
+
+                try {
+                    const userId = auth.currentUser.uid;
+                    const docId = `${gameId}__${userId}`;
+                    const doc = await db.collection('scores').doc(docId).get();
+                    
+                    if (doc.exists) {
+                        return doc.data().score;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('Error getting player score:', error);
+                    return null;
+                }
+            },
+
+            // Get top 5 world high scores for a game
+            async getLeaderboard(gameId, limit = 5) {
+                try {
+                    const snapshot = await db.collection('scores')
+                        .where('gameId', '==', gameId)
+                        .orderBy('score', 'desc')
+                        .limit(limit)
+                        .get();
+
+                    const leaderboard = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        leaderboard.push({
+                            playerName: data.playerName,
+                            score: data.score,
+                            timestamp: data.timestamp
+                        });
+                    });
+
+                    return leaderboard;
+                } catch (error) {
+                    console.error('Error getting leaderboard:', error);
+                    return [];
+                }
+            },
+
+            // Get current user info
+            getCurrentUser() {
+                return auth.currentUser;
+            },
+
+            // Check if user is logged in
+            isLoggedIn() {
+                return auth.currentUser !== null;
+            }
+        };
         // Load play counts on page load
         async function loadPlayCounts() {
             const cards = document.querySelectorAll('.gameCard[data-category]');
