@@ -239,6 +239,24 @@
             gap: 8px;
         }
 
+        .windIndicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-weight: 600;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .windArrow {
+            font-size: 14px;
+            color: #4ecdc4;
+        }
+
         .turnDot {
             width: 18px;
             height: 18px;
@@ -294,6 +312,10 @@
         <div id="controls" aria-label="Turn indicator">
             <span id="turnDot" class="turnDot p1" title="Player 1's turn"></span>
             <span id="turnTimer" class="turnTimer">12.0s</span>
+            <span id="windIndicator" class="windIndicator">
+                <span id="windArrow" class="windArrow">→</span>
+                <span id="windValue">0.0</span>
+            </span>
         </div>
     </div>
 
@@ -324,6 +346,52 @@
             maxTurnTime: 12,
             turnTimeLeft: 12
         };
+
+        // Wind system
+        const wind = {
+            strength: 0,   // current wind strength (negative = left, positive = right)
+            target: 0,     // target strength to ease toward
+            changeTimer: 0 // seconds until next wind shift
+        };
+
+        function setNewWind() {
+            // Wind changes a few times per match
+            const maxStrength = 10;
+            const direction = Math.random() < 0.5 ? -1 : 1;
+            const strengthBias = Math.pow(Math.random(), 1.6); // bias toward lighter winds
+            wind.target = direction * strengthBias * maxStrength;
+            wind.changeTimer = 6 + Math.random() * 6; // 6-12 seconds
+        }
+
+        function updateWind(dt = 1) {
+            // Ease current wind toward target
+            const ease = 0.03 * dt;
+            wind.strength += (wind.target - wind.strength) * ease;
+
+            wind.changeTimer -= (1 / 60) * dt;
+            if (wind.changeTimer <= 0) {
+                setNewWind();
+            }
+
+            updateWindIndicator();
+        }
+
+        function updateWindIndicator() {
+            const windValue = document.getElementById('windValue');
+            const windArrow = document.getElementById('windArrow');
+            if (!windValue || !windArrow) return;
+
+            const displayValue = Math.abs(wind.strength).toFixed(0);
+            windValue.textContent = displayValue;
+            windArrow.textContent = wind.strength >= 0 ? '→' : '←';
+        }
+
+        function getEffectiveWind() {
+            // Strongly soften high wind values (0-10) for gameplay balance
+            const magnitude = Math.abs(wind.strength);
+            const scaled = Math.pow(magnitude / 10, 0.5) * 10;
+            return Math.sign(wind.strength) * scaled * 0.5;
+        }
 
         // Players
         const player1 = {
@@ -458,6 +526,8 @@
             game.turnTimeLeft = game.maxTurnTime;
             updateTurnTimer();
             updateTurnIndicator();
+            setNewWind();
+            updateWindIndicator();
             
             // Record play count
             const playKey = 'game_plays_gunrider';
@@ -528,7 +598,9 @@
             if (projectile.trail.length > 20) projectile.trail.shift();
             
             // Physics
+            const effectiveWind = getEffectiveWind();
             projectile.vy += 0.5 * dt; // Gravity
+            projectile.vx += effectiveWind * 0.015 * dt; // Wind (half)
             projectile.x += projectile.vx * dt;
             projectile.y += projectile.vy * dt;
             
@@ -828,6 +900,10 @@
             // Adjust for projectile arc - aim higher for longer distances
             const arcAdjustment = Math.min(20, distance / 35);
             baseAngle += arcAdjustment;
+
+            // Wind compensation (rough)
+            const effectiveWind = getEffectiveWind();
+            baseAngle += effectiveWind * 0.1;
             
             // Add some inaccuracy to make it challenging but fair (±10 degrees)
             const inaccuracy = (Math.random() - 0.5) * 20;
@@ -837,7 +913,7 @@
             game.botCalculatedAngle = 180 - Math.max(15, Math.min(85, baseAngle));
             
             // Power based on distance
-            const basePower = Math.min(90, (distance / 7) + 30);
+            const basePower = Math.min(90, (distance / 7) + 30 + Math.abs(effectiveWind) * 0.25);
             const powerVariation = (Math.random() - 0.5) * 18; // ±9 power
             game.botCalculatedPower = Math.max(40, Math.min(100, basePower + powerVariation));
         }
@@ -905,6 +981,8 @@
             if (!game.isRunning) return;
 
             const dt = game.timeScale;
+
+            updateWind(dt);
 
             if (game.endSlowMo) {
                 game.endTimer--;
