@@ -629,16 +629,32 @@
         const dailyHighEl = document.getElementById('dailyHighScore');
         if (dailyHighEl) dailyHighEl.textContent = dailyHigh;
 
+        // Local best fallback (when not logged in)
+        const localBestKey = 'bestScore_smot';
+        let localBest = parseInt(localStorage.getItem(localBestKey), 10);
+        if (Number.isNaN(localBest)) localBest = 0;
+
+        function updateLocalBestScore(score) {
+            if (score > localBest) {
+                localBest = score;
+                try { localStorage.setItem(localBestKey, localBest); } catch (e) { /* ignore storage errors */ }
+            }
+        }
+
         // Load player's high score on page load
         async function loadStartScreenHighScore() {
             const GAME_ID = 'smot';
             const GameScores = getGameScoresAPI();
+            let highScore = null;
+
             if (GameScores && GameScores.isLoggedIn()) {
-                const highScore = await GameScores.getPlayerHighScore(GAME_ID);
-                if (highScore !== null) {
-                    document.getElementById('startHighScore').style.display = 'block';
-                    document.getElementById('startHighScoreValue').textContent = highScore;
-                }
+                highScore = await GameScores.getPlayerHighScore(GAME_ID);
+            }
+
+            const scoreToShow = highScore !== null ? highScore : (localBest > 0 ? localBest : null);
+            if (scoreToShow !== null) {
+                document.getElementById('startHighScore').style.display = 'block';
+                document.getElementById('startHighScoreValue').textContent = scoreToShow;
             }
         }
 
@@ -1808,6 +1824,8 @@
             const GAME_ID = 'smot';
             const GameScores = getGameScoresAPI();
 
+            updateLocalBestScore(finalScore);
+
             // Load leaderboard
             await loadLeaderboard(GAME_ID);
 
@@ -1838,6 +1856,8 @@
                 // Not logged in - show login prompt
                 document.getElementById('loginPrompt').style.display = 'block';
             }
+
+            await updatePlayerBestScore();
         }
 
         function getGameScoresAPI() {
@@ -1898,11 +1918,14 @@
                     async function updatePlayerBestScore() {
                         const GAME_ID = 'smot';
                         const GameScores = getGameScoresAPI();
+                        const bestEl = document.getElementById('playerBestScore');
+
                         if (GameScores && GameScores.isLoggedIn()) {
                             const highScore = await GameScores.getPlayerHighScore(GAME_ID);
-                            document.getElementById('playerBestScore').textContent = highScore !== null ? highScore : '--';
+                            const scoreToShow = highScore !== null ? highScore : (localBest > 0 ? localBest : null);
+                            bestEl.textContent = scoreToShow !== null ? scoreToShow : '--';
                         } else {
-                            document.getElementById('playerBestScore').textContent = '--';
+                            bestEl.textContent = localBest > 0 ? localBest : '--';
                         }
                     }
 

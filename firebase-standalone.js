@@ -85,8 +85,6 @@ window.GameScores = {
         try {
             const snapshot = await db.collection('scores')
                 .where('gameId', '==', gameId)
-                .orderBy('score', 'desc')
-                .limit(limit)
                 .get();
 
             const leaderboard = [];
@@ -99,14 +97,11 @@ window.GameScores = {
                 });
             });
 
-            return leaderboard;
+            leaderboard.sort((a, b) => b.score - a.score);
+            return leaderboard.slice(0, limit);
         } catch (error) {
             console.error('Error getting leaderboard:', error);
             console.error('ERROR DETAILS:', error.code, error.message);
-            if (error.code === 'failed-precondition') {
-                console.error('⚠️ FIRESTORE INDEX REQUIRED! Go to Firebase Console → Firestore → Indexes');
-                console.error('Create composite index: scores collection → gameId (Ascending), score (Descending)');
-            }
             return [];
         }
     },
