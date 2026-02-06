@@ -1858,7 +1858,19 @@
             }
 
             const leaderboard = await GameScores.getLeaderboard(gameId, 5);
-                    }
+            const listEl = document.getElementById('leaderboardList');
+
+            if (leaderboard.length === 0) {
+                listEl.innerHTML = '<li style="color: rgba(255,255,255,0.5)">No scores yet</li>';
+            } else {
+                listEl.innerHTML = leaderboard.map((entry, index) => `
+                    <li>
+                        <span><span class="rank">#${index + 1}</span>${entry.playerName}</span>
+                        <strong>${entry.score}</strong>
+                    </li>
+                `).join('');
+            }
+        }
 
                     async function updateSidePanelLeaderboard() {
                         const GAME_ID = 'smot';
