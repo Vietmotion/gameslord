@@ -1,4 +1,4 @@
-# Free Web Games Workspace
+# playplay Workspace
 
 This workspace contains multiple web games. As the project grows, this file helps you quickly find key functions, systems, and files to tweak.
 
