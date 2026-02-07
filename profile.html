@@ -175,6 +175,52 @@
             margin-right: 8px;
         }
 
+        .displayNameEditor {
+            margin-top: 18px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .displayNameEditor label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        .displayNameEditor input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .displayNameEditor input:focus {
+            outline: none;
+            border-color: rgba(78, 205, 196, 0.7);
+        }
+
+        .displayNameActions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .displayNameStatus {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .displayNameStatus.success {
+            color: #4ecdc4;
+        }
+
+        .displayNameStatus.error {
+            color: #ff6b6b;
+        }
+
         .statsGrid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -275,6 +321,14 @@
                     <div><span>Member Since</span><strong id="profileCreated">-</strong></div>
                     <div><span>Last Login</span><strong id="profileLastLogin">-</strong></div>
                 </div>
+                <div class="displayNameEditor">
+                    <label for="displayNameInput">Create your display name (3-16 letters, numbers, or _)</label>
+                    <input id="displayNameInput" type="text" placeholder="e.g. PixelHero" maxlength="16" autocomplete="off">
+                    <div class="displayNameActions">
+                        <button id="saveDisplayNameBtn" class="authButton primary">Save Display Name</button>
+                        <span id="displayNameStatus" class="displayNameStatus"></span>
+                    </div>
+                </div>
             </div>
             <div class="profileCard">
                 <h3>Recent High Scores</h3>
@@ -320,6 +374,7 @@
 
         let db = null;
         let auth = null;
+        let displayNameCheckTimer = null;
 
         const gameNameMap = {
             smot: 'So Many Of Them',
@@ -327,6 +382,14 @@
             gunrider: 'Gun Rider',
             chesswar: 'Chess War'
         };
+
+        function normalizeDisplayName(name) {
+            return name.trim().toLowerCase();
+        }
+
+        function isValidDisplayName(name) {
+            return /^[a-zA-Z0-9_]{3,16}$/.test(name);
+        }
 
         function initFirebase() {
             const missingConfig = Object.values(firebaseConfig).some(value => String(value).startsWith('YOUR_'));
@@ -395,14 +458,17 @@
 
             const userRef = db.collection('users').doc(user.uid);
             const userDoc = await userRef.get();
+            const existingData = userDoc.exists ? userDoc.data() : null;
+            const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
+            const resolvedName = existingData && existingData.displayName ? existingData.displayName : fallbackName;
             const baseProfile = {
                 email: user.email || '',
-                displayName: user.displayName || (user.email ? user.email.split('@')[0] : 'Player'),
+                displayName: resolvedName,
+                displayNameLower: normalizeDisplayName(resolvedName),
                 lastLogin: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             if (userDoc.exists) {
-                const existingData = userDoc.data();
                 if (existingData && existingData.registerNumber) {
                     await userRef.set(baseProfile, { merge: true });
                     const freshDoc = await userRef.get();
@@ -538,9 +604,10 @@
                 return;
             }
 
-            const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
+            const displayName = (profile && profile.displayName) || user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
             document.getElementById('profileEmail').textContent = user.email || '-';
             document.getElementById('profileName').textContent = displayName;
+            document.getElementById('displayNameInput').value = displayName;
 
             if (profile && profile.registerNumber) {
                 document.getElementById('registerNumber').textContent = `#${profile.registerNumber}`;
@@ -550,6 +617,70 @@
 
             const scoresInfo = await loadRecentScores(user);
             updateStats(scoresInfo);
+        }
+
+        function setDisplayNameStatus(message, state) {
+            const statusEl = document.getElementById('displayNameStatus');
+            statusEl.textContent = message || '';
+            statusEl.className = 'displayNameStatus';
+            if (state === 'success') {
+                statusEl.classList.add('success');
+            }
+            if (state === 'error') {
+                statusEl.classList.add('error');
+            }
+        }
+
+        async function checkDisplayNameAvailability(name) {
+            if (!db || !auth.currentUser) {
+                return false;
+            }
+
+            if (!isValidDisplayName(name)) {
+                setDisplayNameStatus('Use 3-16 letters, numbers, or _.', 'error');
+                return false;
+            }
+
+            const normalized = normalizeDisplayName(name);
+            const snapshot = await db.collection('users')
+                .where('displayNameLower', '==', normalized)
+                .get();
+
+            const available = snapshot.empty || snapshot.docs.every(doc => doc.id === auth.currentUser.uid);
+            if (available) {
+                setDisplayNameStatus('Name is available.', 'success');
+            } else {
+                setDisplayNameStatus('Name is already taken.', 'error');
+            }
+            return available;
+        }
+
+        async function saveDisplayName() {
+            const inputEl = document.getElementById('displayNameInput');
+            const desiredName = inputEl.value.trim();
+
+            if (!auth.currentUser) {
+                setDisplayNameStatus('Please login first.', 'error');
+                return;
+            }
+
+            const isAvailable = await checkDisplayNameAvailability(desiredName);
+            if (!isAvailable) {
+                return;
+            }
+
+            try {
+                const userRef = db.collection('users').doc(auth.currentUser.uid);
+                await userRef.set({
+                    displayName: desiredName,
+                    displayNameLower: normalizeDisplayName(desiredName)
+                }, { merge: true });
+                document.getElementById('profileName').textContent = desiredName;
+                setDisplayNameStatus('Display name updated.', 'success');
+            } catch (error) {
+                console.error('Display name update error:', error);
+                setDisplayNameStatus('Could not save display name.', 'error');
+            }
         }
 
         async function handleLogout() {
@@ -564,6 +695,19 @@
             window.location.href = 'index.html';
         });
         document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+        document.getElementById('saveDisplayNameBtn').addEventListener('click', saveDisplayName);
+        document.getElementById('displayNameInput').addEventListener('input', event => {
+            const value = event.target.value;
+            setDisplayNameStatus('', null);
+            if (displayNameCheckTimer) {
+                clearTimeout(displayNameCheckTimer);
+            }
+            displayNameCheckTimer = setTimeout(() => {
+                if (value.trim().length > 0) {
+                    checkDisplayNameAvailability(value.trim());
+                }
+            }, 500);
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             initFirebase();
