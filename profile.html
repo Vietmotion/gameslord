@@ -409,6 +409,7 @@
                     ensureUserProfile(user)
                         .then(profile => loadUserProfile(user, profile))
                         .catch(error => console.error('Profile load error:', error));
+                    setTimeout(refreshProfileFromAuth, 800);
                 } else {
                     showLoggedOutNotice();
                 }
@@ -462,6 +463,7 @@
             const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
             const resolvedName = existingData && existingData.displayName ? existingData.displayName : fallbackName;
             const baseProfile = {
+                userId: user.uid,
                 email: user.email || '',
                 displayName: resolvedName,
                 displayNameLower: normalizeDisplayName(resolvedName),
@@ -483,6 +485,7 @@
 
                     transaction.set(counterRef, { value: nextValue }, { merge: true });
                     transaction.set(userRef, {
+                        userId: user.uid,
                         registerNumber: nextValue,
                         createdAt: existingData && existingData.createdAt ? existingData.createdAt : firebase.firestore.FieldValue.serverTimestamp(),
                         ...baseProfile
@@ -503,6 +506,7 @@
 
                 transaction.set(counterRef, { value: nextValue }, { merge: true });
                 createdProfile = {
+                    userId: user.uid,
                     registerNumber: nextValue,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     ...baseProfile
@@ -619,6 +623,25 @@
             updateStats(scoresInfo);
         }
 
+        async function refreshProfileFromAuth() {
+            if (!db || !auth) {
+                return;
+            }
+            const user = auth.currentUser;
+            if (!user) {
+                showLoggedOutNotice();
+                return;
+            }
+            try {
+                const userRef = db.collection('users').doc(user.uid);
+                const userDoc = await userRef.get();
+                const profile = userDoc.exists ? userDoc.data() : null;
+                loadUserProfile(user, profile);
+            } catch (error) {
+                console.error('Profile refresh error:', error);
+            }
+        }
+
         function setDisplayNameStatus(message, state) {
             const statusEl = document.getElementById('displayNameStatus');
             statusEl.textContent = message || '';
@@ -709,9 +732,11 @@
             }, 500);
         });
 
-        document.addEventListener('DOMContentLoaded', () => {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initFirebase);
+        } else {
             initFirebase();
-        });
+        }
     </script>
 </body>
 </html>
