@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>playplay - Player Page</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            font-family: 'Poppins', sans-serif;
+            min-height: 100vh;
+            padding: 0;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #menuBar {
+            width: 100%;
+            height: 70px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(78, 205, 196, 0.2);
+            position: relative;
+            z-index: 10;
+        }
+
+        #homeButton {
+            padding: 12px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            letter-spacing: 0.5px;
+        }
+
+        #homeButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        #pageTitle {
+            font-size: 56px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(78, 205, 196, 0.3);
+            margin: 50px 0 10px 0;
+            text-align: center;
+            letter-spacing: -1px;
+            animation: slideIn 0.8s ease-out;
+            position: relative;
+            z-index: 5;
+        }
+
+        #subtitle {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.7);
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            animation: slideIn 0.8s ease-out 0.2s both;
+            position: relative;
+            z-index: 5;
+        }
+
+        #profilePage {
+            max-width: 1200px;
+            margin: 30px auto 80px;
+            padding: 0 20px;
+            position: relative;
+            z-index: 5;
+        }
+
+        .profileHeader {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .profileHeader h2 {
+            color: #4ecdc4;
+            font-size: 34px;
+            margin-bottom: 6px;
+        }
+
+        .profileHeader p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 15px;
+        }
+
+        .profileGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .profileCard {
+            background: rgba(26, 26, 46, 0.7);
+            border: 2px solid rgba(78, 205, 196, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+            min-height: 220px;
+        }
+
+        .profileCard h3 {
+            color: #4ecdc4;
+            font-size: 20px;
+            margin-bottom: 16px;
+        }
+
+        .registerNumber {
+            font-size: 40px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 18px;
+        }
+
+        .profileMeta {
+            display: grid;
+            gap: 10px;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 14px;
+        }
+
+        .profileMeta span {
+            color: rgba(255, 255, 255, 0.5);
+            margin-right: 8px;
+        }
+
+        .statsGrid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .statItem {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .statItem p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.55);
+            margin-bottom: 6px;
+        }
+
+        .statItem strong {
+            font-size: 18px;
+            color: #fff;
+        }
+
+        #recentScores {
+            list-style: none;
+            display: grid;
+            gap: 12px;
+        }
+
+        .scoreItem {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .scoreItem strong {
+            color: #4ecdc4;
+        }
+
+        #profileNotice {
+            margin-top: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+        }
+
+        .authButton {
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .authButton.primary {
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%);
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="menuBar">
+        <button id="homeButton" onclick="window.location.href='index.html'">Home</button>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 15px;">
+            <span id="userEmail" style="color: #4ecdc4; font-size: 14px; display: none;"></span>
+            <button id="loginBtn" class="authButton primary">Login</button>
+            <button id="logoutBtn" class="authButton" style="display: none;">Logout</button>
+        </div>
+    </div>
+
+    <div id="pageTitle">PLAYPLAY</div>
+    <div id="subtitle">Player Personal Page</div>
+
+    <section id="profilePage">
+        <div class="profileHeader">
+            <div>
+                <h2>Player Personal Page</h2>
+                <p>Visible after you are authorized.</p>
+                <div id="profileNotice"></div>
+            </div>
+        </div>
+        <div class="profileGrid">
+            <div class="profileCard">
+                <h3>Player ID</h3>
+                <div class="registerNumber" id="registerNumber">#-</div>
+                <div class="profileMeta">
+                    <div><span>Email</span><strong id="profileEmail">-</strong></div>
+                    <div><span>Display Name</span><strong id="profileName">-</strong></div>
+                    <div><span>Member Since</span><strong id="profileCreated">-</strong></div>
+                    <div><span>Last Login</span><strong id="profileLastLogin">-</strong></div>
+                </div>
+            </div>
+            <div class="profileCard">
+                <h3>Recent High Scores</h3>
+                <ul id="recentScores"></ul>
+            </div>
+            <div class="profileCard">
+                <h3>Quick Stats</h3>
+                <div class="statsGrid">
+                    <div class="statItem">
+                        <p>Games With Scores</p>
+                        <strong id="statGames">0</strong>
+                    </div>
+                    <div class="statItem">
+                        <p>Best Score</p>
+                        <strong id="statBest">-</strong>
+                    </div>
+                    <div class="statItem">
+                        <p>Last Score Update</p>
+                        <strong id="statLastScore">-</strong>
+                    </div>
+                    <div class="statItem">
+                        <p>Total Score Records</p>
+                        <strong id="statRecords">0</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDI4oTgZDCuKGBrTzlbOcxRNz4mQLvSH_8",
+            authDomain: "gameslord-f3fd4.firebaseapp.com",
+            projectId: "gameslord-f3fd4",
+            storageBucket: "gameslord-f3fd4.firebasestorage.app",
+            messagingSenderId: "637214003741",
+            appId: "1:637214003741:web:be6e6633b1bac24b102cf4",
+            measurementId: "G-ZJGJLDT7M9"
+        };
+
+        let db = null;
+        let auth = null;
+
+        const gameNameMap = {
+            smot: 'So Many Of Them',
+            spacepong: 'Space Pong',
+            gunrider: 'Gun Rider',
+            chesswar: 'Chess War'
+        };
+
+        function initFirebase() {
+            const missingConfig = Object.values(firebaseConfig).some(value => String(value).startsWith('YOUR_'));
+            if (missingConfig) {
+                console.warn('Firebase config is missing. Replace placeholders to enable profile features.');
+                return;
+            }
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+            auth = firebase.auth();
+
+            auth.onAuthStateChanged(user => {
+                updateAuthUI(user);
+                if (user) {
+                    ensureUserProfile(user)
+                        .then(profile => loadUserProfile(user, profile))
+                        .catch(error => console.error('Profile load error:', error));
+                } else {
+                    showLoggedOutNotice();
+                }
+            });
+        }
+
+        function updateAuthUI(user) {
+            const loginBtn = document.getElementById('loginBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const userEmail = document.getElementById('userEmail');
+
+            if (user) {
+                loginBtn.style.display = 'none';
+                logoutBtn.style.display = 'block';
+                userEmail.style.display = 'block';
+                userEmail.textContent = user.email;
+            } else {
+                loginBtn.style.display = 'block';
+                logoutBtn.style.display = 'none';
+                userEmail.style.display = 'none';
+            }
+        }
+
+        function showLoggedOutNotice() {
+            document.getElementById('profileNotice').textContent = 'Please login on the home page to view your profile.';
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 900);
+        }
+
+        function formatDateTime(timestamp) {
+            if (!timestamp) {
+                return '-';
+            }
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        async function ensureUserProfile(user) {
+            if (!db || !user) {
+                return null;
+            }
+
+            const userRef = db.collection('users').doc(user.uid);
+            const userDoc = await userRef.get();
+            const baseProfile = {
+                email: user.email || '',
+                displayName: user.displayName || (user.email ? user.email.split('@')[0] : 'Player'),
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            if (userDoc.exists) {
+                const existingData = userDoc.data();
+                if (existingData && existingData.registerNumber) {
+                    await userRef.set(baseProfile, { merge: true });
+                    const freshDoc = await userRef.get();
+                    return freshDoc.data();
+                }
+
+                const counterRef = db.collection('meta').doc('userCounter');
+                await db.runTransaction(async transaction => {
+                    const counterDoc = await transaction.get(counterRef);
+                    const currentValue = counterDoc.exists ? (counterDoc.data().value || 0) : 0;
+                    const nextValue = currentValue + 1;
+
+                    transaction.set(counterRef, { value: nextValue }, { merge: true });
+                    transaction.set(userRef, {
+                        registerNumber: nextValue,
+                        createdAt: existingData && existingData.createdAt ? existingData.createdAt : firebase.firestore.FieldValue.serverTimestamp(),
+                        ...baseProfile
+                    }, { merge: true });
+                });
+
+                const freshDoc = await userRef.get();
+                return freshDoc.data();
+            }
+
+            const counterRef = db.collection('meta').doc('userCounter');
+            let createdProfile = null;
+
+            await db.runTransaction(async transaction => {
+                const counterDoc = await transaction.get(counterRef);
+                const currentValue = counterDoc.exists ? (counterDoc.data().value || 0) : 0;
+                const nextValue = currentValue + 1;
+
+                transaction.set(counterRef, { value: nextValue }, { merge: true });
+                createdProfile = {
+                    registerNumber: nextValue,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    ...baseProfile
+                };
+                transaction.set(userRef, createdProfile, { merge: true });
+            });
+
+            const freshDoc = await userRef.get();
+            return freshDoc.data() || createdProfile;
+        }
+
+        async function loadRecentScores(user) {
+            const listEl = document.getElementById('recentScores');
+            listEl.innerHTML = '';
+
+            if (!db || !user) {
+                const empty = document.createElement('li');
+                empty.textContent = 'No scores yet.';
+                listEl.appendChild(empty);
+                return { scores: [], totalRecords: 0 };
+            }
+
+            try {
+                const snapshot = await db.collection('scores')
+                    .where('userId', '==', user.uid)
+                    .get();
+
+                const recentMap = new Map();
+                const allScores = [];
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const timestamp = data.timestamp;
+                    const record = {
+                        gameId: data.gameId,
+                        score: data.score,
+                        timestamp: timestamp
+                    };
+                    allScores.push(record);
+
+                    const existing = recentMap.get(data.gameId);
+                    if (!existing || data.score > existing.score) {
+                        recentMap.set(data.gameId, record);
+                    }
+                });
+
+                const recentScores = Array.from(recentMap.values())
+                    .sort((a, b) => {
+                        const aTime = a.timestamp ? a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime() : 0;
+                        const bTime = b.timestamp ? b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime() : 0;
+                        return bTime - aTime;
+                    })
+                    .slice(0, 5);
+
+                if (recentScores.length === 0) {
+                    const empty = document.createElement('li');
+                    empty.textContent = 'No scores yet.';
+                    listEl.appendChild(empty);
+                } else {
+                    recentScores.forEach(score => {
+                        const item = document.createElement('li');
+                        item.className = 'scoreItem';
+                        const gameTitle = gameNameMap[score.gameId] || score.gameId;
+                        item.innerHTML = `<span>${gameTitle}</span><strong>${score.score}</strong>`;
+                        listEl.appendChild(item);
+                    });
+                }
+
+                return { scores: allScores, totalRecords: allScores.length };
+            } catch (error) {
+                console.error('Error loading recent scores:', error);
+                const errorItem = document.createElement('li');
+                errorItem.textContent = 'Unable to load scores right now.';
+                listEl.appendChild(errorItem);
+                return { scores: [], totalRecords: 0 };
+            }
+        }
+
+        function updateStats(scoresInfo) {
+            const scores = scoresInfo.scores || [];
+            const games = new Set(scores.map(score => score.gameId));
+            const best = scores.reduce((max, score) => Math.max(max, score.score || 0), 0);
+            const latest = scores
+                .filter(score => score.timestamp)
+                .sort((a, b) => {
+                    const aTime = a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime();
+                    const bTime = b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime();
+                    return bTime - aTime;
+                })[0];
+
+            document.getElementById('statGames').textContent = games.size;
+            document.getElementById('statBest').textContent = best ? best : '-';
+            document.getElementById('statLastScore').textContent = latest ? formatDateTime(latest.timestamp) : '-';
+            document.getElementById('statRecords').textContent = scoresInfo.totalRecords || 0;
+        }
+
+        async function loadUserProfile(user, profile) {
+            if (!user) {
+                return;
+            }
+
+            const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
+            document.getElementById('profileEmail').textContent = user.email || '-';
+            document.getElementById('profileName').textContent = displayName;
+
+            if (profile && profile.registerNumber) {
+                document.getElementById('registerNumber').textContent = `#${profile.registerNumber}`;
+                document.getElementById('profileCreated').textContent = formatDateTime(profile.createdAt);
+                document.getElementById('profileLastLogin').textContent = formatDateTime(profile.lastLogin);
+            }
+
+            const scoresInfo = await loadRecentScores(user);
+            updateStats(scoresInfo);
+        }
+
+        async function handleLogout() {
+            try {
+                await auth.signOut();
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
+        document.getElementById('loginBtn').addEventListener('click', () => {
+            window.location.href = 'index.html';
+        });
+        document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initFirebase();
+        });
+    </script>
+</body>
+</html>
