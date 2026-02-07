@@ -339,6 +339,10 @@
         const ctx = canvas.getContext('2d');
         canvas.width = 1200;
         canvas.height = 700;
+        const VIEW_WIDTH = canvas.width;
+        const VIEW_HEIGHT = canvas.height;
+        const WORLD_WIDTH = 2400;
+        const WORLD_HEIGHT = 700;
 
         // Game state
         const game = {
@@ -359,7 +363,9 @@
             endSlowMo: false,
             endTimer: 0,
             maxTurnTime: 12,
-            turnTimeLeft: 12
+            turnTimeLeft: 12,
+            cameraSnap: true,
+            cameraHoldX: null
         };
 
         // Wind system
@@ -368,6 +374,54 @@
             target: 0,     // target strength to ease toward
             changeTimer: 0 // seconds until next wind shift
         };
+
+        const camera = {
+            x: 0
+        };
+
+        function updateCamera(targetX) {
+            const desired = Math.max(0, Math.min(WORLD_WIDTH - VIEW_WIDTH, targetX - VIEW_WIDTH / 2));
+            if (game.cameraSnap) {
+                camera.x = desired;
+                game.cameraSnap = false;
+                return;
+            }
+            camera.x += (desired - camera.x) * 0.08;
+        }
+
+        function randRange(min, max) {
+            return min + Math.random() * (max - min);
+        }
+
+        function lerp(current, target, amount) {
+            return current + (target - current) * amount;
+        }
+
+        function clampAngleDelta(current, target, maxDelta) {
+            const delta = target - current;
+            if (Math.abs(delta) <= maxDelta) {
+                return target;
+            }
+            return current + Math.sign(delta) * maxDelta;
+        }
+
+        function setSpawnPositions() {
+            const leftMin = 360;
+            const leftMax = 820;
+            const rightMin = WORLD_WIDTH - 820;
+            const rightMax = WORLD_WIDTH - 360;
+            const minDistance = 480;
+
+            player1.x = randRange(leftMin, leftMax);
+            player2.x = randRange(rightMin, rightMax);
+
+            if (Math.abs(player2.x - player1.x) < minDistance) {
+                player2.x = Math.min(WORLD_WIDTH - 120, player1.x + minDistance);
+                if (player2.x > WORLD_WIDTH - 120) {
+                    player1.x = Math.max(120, player2.x - minDistance);
+                }
+            }
+        }
 
         function setNewWind() {
             // Wind changes a few times per match
@@ -430,7 +484,7 @@
         };
 
         const player2 = {
-            x: 1050,
+            x: 2150,
             y: 0,
             vx: 0,
             vy: 0,
@@ -453,6 +507,45 @@
         const terrain = [];
         const terrainSegments = 60;
 
+        const MAP01 = {
+            ground: {
+                width: 2272,
+                height: 581,
+                paths: [
+                    {
+                        d: "M109.118 403.325C55.5183 403.325 14.4516 515.284 0.618286 579.951H2270.62C2251.79 522.618 2200.42 416.538 2145.62 416.538C2077.12 416.538 2085.62 329.451 1998.62 329.451H1638.12C1489.62 329.451 1504.12 408.331 1273.62 408.331C1043.12 408.331 1076.62 350.172 862.618 350.172C714.618 350.172 712.618 383.805 607.618 383.805C502.618 383.805 448.118 429.451 397.118 429.451H256.118C185.618 429.451 176.118 403.325 109.118 403.325Z",
+                        fill: "#9F5426",
+                        stroke: "#E9B771",
+                        role: "ground"
+                    },
+                    {
+                        d: "M256.118 125.951C223.163 124.229 145.118 98.2596 130.118 131.451C106.618 183.451 164.118 227.451 192.618 227.451C221.118 227.451 347.118 229.951 390.618 227.451C434.118 224.951 466.618 78.451 426.118 78.451C399.15 78.4511 380.693 75.9986 351.618 83.9511C322.744 91.8488 300.027 128.245 256.118 125.951Z",
+                        fill: "#9F5426",
+                        stroke: "#E9B771",
+                        role: "platform"
+                    },
+                    {
+                        d: "M1425.62 9.95097C1408.12 22.451 1388.12 95.951 1410.12 104.451H1452.62C1467.12 104.451 1465.12 61.4509 1513.62 62.4509C1539.79 62.9904 1521.62 100.951 1537.12 100.951C1554.62 100.951 1604.09 101.181 1627.12 100.951C1654.57 100.676 1640.98 79.951 1632.12 47.451C1626.12 25.451 1617.62 0.950968 1594.62 0.95097C1550.62 0.950974 1443.12 -2.54903 1425.62 9.95097Z",
+                        fill: "#9F5426",
+                        stroke: "#E9B771",
+                        role: "platform"
+                    }
+                ]
+            },
+            water: {
+                width: 2401,
+                height: 63,
+                fill: "#6B9EA2",
+                stroke: "#5AC4BF"
+            }
+        };
+
+        const terrainScaleX = WORLD_WIDTH / MAP01.ground.width;
+        const terrainScaleY = WORLD_HEIGHT / MAP01.ground.height;
+
+        const waterScale = WORLD_WIDTH / MAP01.water.width;
+        const waterHeight = MAP01.water.height * waterScale;
+
         // Projectile
         let projectile = null;
 
@@ -460,55 +553,176 @@
         let craters = [];
 
         // Water level
-        const WATER_LEVEL = 650;
+        const WATER_LEVEL = Math.round(WORLD_HEIGHT - waterHeight);
+
+        const mapPathObjects = MAP01.ground.paths.map(path => ({
+            ...path,
+            path2d: new Path2D(path.d)
+        }));
+
+        const groundStyle = {
+            fill: MAP01.ground.paths[0].fill,
+            stroke: MAP01.ground.paths[0].stroke
+        };
 
         // Initialize terrain
-        function initTerrain() {
-            terrain.length = 0; // Clear existing terrain
-            
-            // Create a more defined terrain with clear slopes and flat sections
-            for (let i = 0; i <= terrainSegments; i++) {
-                const x = (canvas.width / terrainSegments) * i;
-                const ratio = i / terrainSegments;
-                let y = 550;
-                
-                // Section 1 (0-0.2): Flat ground on the left
-                if (ratio < 0.2) {
-                    y = 550;
+        function buildTerrainFromSvgPath(pathData, fillGaps = true) {
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            const path = document.createElementNS(svgNS, 'path');
+            path.setAttribute('d', pathData);
+            svg.appendChild(path);
+
+            const totalLength = path.getTotalLength();
+            const sampleCount = Math.max(800, WORLD_WIDTH * 3);
+            const heights = new Array(WORLD_WIDTH + 1).fill(null);
+
+            for (let i = 0; i <= sampleCount; i++) {
+                const point = path.getPointAtLength((totalLength * i) / sampleCount);
+                const x = point.x * terrainScaleX;
+                const y = point.y * terrainScaleY;
+                const xi = Math.round(x);
+                if (xi < 0 || xi > WORLD_WIDTH) {
+                    continue;
                 }
-                // Section 2 (0.2-0.35): Uphill slope
-                else if (ratio < 0.35) {
-                    const sectionRatio = (ratio - 0.2) / 0.15;
-                    y = 550 - sectionRatio * 80; // Slope up
-                }
-                // Section 3 (0.35-0.5): Flat at top
-                else if (ratio < 0.5) {
-                    y = 470;
-                }
-                // Section 4 (0.5-0.65): Downhill slope
-                else if (ratio < 0.65) {
-                    const sectionRatio = (ratio - 0.5) / 0.15;
-                    y = 470 + sectionRatio * 100; // Slope down
-                }
-                // Section 5 (0.65-0.8): Flat valley
-                else if (ratio < 0.8) {
-                    y = 570;
-                }
-                // Section 6 (0.8-1.0): Uphill to the right
-                else {
-                    const sectionRatio = (ratio - 0.8) / 0.2;
-                    y = 570 - sectionRatio * 60; // Slope up
-                }
-                
-                terrain.push({ x, y });
+                const current = heights[xi];
+                heights[xi] = current === null ? y : Math.min(current, y);
             }
-            
+
+            if (fillGaps) {
+                let last = null;
+                for (let i = 0; i < heights.length; i++) {
+                    if (heights[i] === null) {
+                        heights[i] = last;
+                    } else {
+                        last = heights[i];
+                    }
+                }
+                for (let i = heights.length - 1; i >= 0; i--) {
+                    if (heights[i] === null) {
+                        heights[i] = last;
+                    } else {
+                        last = heights[i];
+                    }
+                }
+            }
+
+            return heights;
+        }
+
+        function buildSurfaceHeightsContinuous(pathData) {
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            const path = document.createElementNS(svgNS, 'path');
+            path.setAttribute('d', pathData);
+            svg.appendChild(path);
+
+            const totalLength = path.getTotalLength();
+            const sampleCount = Math.max(1200, WORLD_WIDTH * 4);
+            const heights = new Array(WORLD_WIDTH + 1).fill(null);
+
+            let prev = null;
+            for (let i = 0; i <= sampleCount; i++) {
+                const point = path.getPointAtLength((totalLength * i) / sampleCount);
+                const x = point.x * terrainScaleX;
+                const y = point.y * terrainScaleY;
+                const xi = Math.round(x);
+                if (xi < 0 || xi > WORLD_WIDTH) {
+                    prev = { x, y };
+                    continue;
+                }
+
+                if (prev) {
+                    const startX = Math.max(0, Math.round(Math.min(prev.x, x)));
+                    const endX = Math.min(WORLD_WIDTH, Math.round(Math.max(prev.x, x)));
+                    const dx = x - prev.x;
+                    for (let sx = startX; sx <= endX; sx++) {
+                        const t = dx === 0 ? 0 : (sx - prev.x) / dx;
+                        const yVal = prev.y + (y - prev.y) * t;
+                        const current = heights[sx];
+                        heights[sx] = current === null ? yVal : Math.min(current, yVal);
+                    }
+                } else {
+                    heights[xi] = y;
+                }
+
+                prev = { x, y };
+            }
+
+            return heights;
+        }
+
+        function fillShortGaps(heights, maxGap = 6) {
+            let lastIndex = null;
+            for (let i = 0; i < heights.length; i++) {
+                if (heights[i] !== null && heights[i] !== undefined) {
+                    if (lastIndex !== null) {
+                        const gap = i - lastIndex - 1;
+                        if (gap > 0 && gap <= maxGap) {
+                            const start = heights[lastIndex];
+                            const end = heights[i];
+                            for (let g = 1; g <= gap; g++) {
+                                const t = g / (gap + 1);
+                                heights[lastIndex + g] = start + (end - start) * t;
+                            }
+                        }
+                    }
+                    lastIndex = i;
+                }
+            }
+        }
+
+        function fillSurfaceSpan(heights) {
+            let first = null;
+            let last = null;
+            for (let i = 0; i < heights.length; i++) {
+                if (heights[i] !== null && heights[i] !== undefined) {
+                    first = i;
+                    break;
+                }
+            }
+            for (let i = heights.length - 1; i >= 0; i--) {
+                if (heights[i] !== null && heights[i] !== undefined) {
+                    last = i;
+                    break;
+                }
+            }
+            if (first === null || last === null) {
+                return;
+            }
+
+            let lastValue = heights[first];
+            for (let i = first + 1; i <= last; i++) {
+                if (heights[i] === null || heights[i] === undefined) {
+                    heights[i] = lastValue;
+                } else {
+                    lastValue = heights[i];
+                }
+            }
+        }
+
+
+        function initTerrain() {
+            terrain.length = 0;
+            const groundPath = MAP01.ground.paths.find(path => path.role === 'ground');
+            if (groundPath) {
+                const groundHeights = buildTerrainFromSvgPath(groundPath.d, true);
+                terrain.push(...groundHeights.map((y, x) => ({
+                    x,
+                    y: y === null ? WORLD_HEIGHT : y
+                })));
+            }
+
+            setSpawnPositions();
+
+            smoothTerrain(1, 0.2);
+
             // Position players on terrain
             player1.y = getTerrainHeight(player1.x) - 40;
-            player1.groundAngle = getTerrainSlope(player1.x);
-            
+            player1.groundAngle = getSurfaceBelowY(player1.x, player1.y + 40).slope;
+
             player2.y = getTerrainHeight(player2.x) - 40;
-            player2.groundAngle = getTerrainSlope(player2.x);
+            player2.groundAngle = getSurfaceBelowY(player2.x, player2.y + 40).slope;
         }
 
         function getTerrainHeight(x) {
@@ -522,23 +736,142 @@
         }
 
         function getTerrainSlope(x) {
-            // Get the angle of the slope at position x
-            for (let i = 0; i < terrain.length - 1; i++) {
-                if (x >= terrain[i].x && x <= terrain[i + 1].x) {
-                    const dx = terrain[i + 1].x - terrain[i].x;
-                    const dy = terrain[i + 1].y - terrain[i].y;
-                    // Negate because in canvas +y is down, we want uphill to be positive
-                    const angle = -Math.atan2(dy, dx) * 180 / Math.PI;
-                    return angle;
-                }
+            const window = 8;
+            const leftX = Math.max(0, x - window);
+            const rightX = Math.min(WORLD_WIDTH, x + window);
+            const leftY = getTerrainHeight(leftX);
+            const rightY = getTerrainHeight(rightX);
+            const dx = rightX - leftX;
+            if (dx === 0) {
+                return 0;
             }
-            return 0;
+            const dy = rightY - leftY;
+            // Negate because in canvas +y is down, we want uphill to be positive
+            return -Math.atan2(dy, dx) * 180 / Math.PI;
+        }
+
+        function buildPlatformBands(pathData) {
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            const path = document.createElementNS(svgNS, 'path');
+            path.setAttribute('d', pathData);
+            svg.appendChild(path);
+
+            const totalLength = path.getTotalLength();
+            const sampleCount = Math.max(1200, WORLD_WIDTH * 4);
+            const top = new Array(WORLD_WIDTH + 1).fill(null);
+            const bottom = new Array(WORLD_WIDTH + 1).fill(null);
+
+            let prev = null;
+            for (let i = 0; i <= sampleCount; i++) {
+                const point = path.getPointAtLength((totalLength * i) / sampleCount);
+                const x = point.x * terrainScaleX;
+                const y = point.y * terrainScaleY;
+                const xi = Math.round(x);
+                if (xi < 0 || xi > WORLD_WIDTH) {
+                    prev = { x, y };
+                    continue;
+                }
+
+                const registerPoint = (px, py) => {
+                    const currentTop = top[px];
+                    const currentBottom = bottom[px];
+                    top[px] = currentTop === null ? py : Math.min(currentTop, py);
+                    bottom[px] = currentBottom === null ? py : Math.max(currentBottom, py);
+                };
+
+                if (prev) {
+                    const startX = Math.max(0, Math.round(Math.min(prev.x, x)));
+                    const endX = Math.min(WORLD_WIDTH, Math.round(Math.max(prev.x, x)));
+                    const dx = x - prev.x;
+                    for (let sx = startX; sx <= endX; sx++) {
+                        const t = dx === 0 ? 0 : (sx - prev.x) / dx;
+                        const yVal = prev.y + (y - prev.y) * t;
+                        registerPoint(sx, yVal);
+                    }
+                } else {
+                    registerPoint(xi, y);
+                }
+
+                prev = { x, y };
+            }
+
+            fillShortGaps(top, 12);
+            fillShortGaps(bottom, 12);
+
+            return { top, bottom };
+        }
+
+        const platformBands = mapPathObjects
+            .filter(path => path.role === 'platform')
+            .map(path => ({
+                ...path,
+                bands: buildPlatformBands(path.d)
+            }));
+
+        function isPointInPlatform(x, y) {
+            const xi = Math.round(x);
+            return platformBands.some(platform => {
+                const top = platform.bands.top[xi];
+                const bottom = platform.bands.bottom[xi];
+                if (top === null || bottom === null || top === undefined || bottom === undefined) {
+                    return false;
+                }
+                return y >= top && y <= bottom;
+            });
+        }
+
+        function getPlatformSurfaceAt(x, yThreshold) {
+            const xi = Math.round(x);
+            let best = null;
+
+            platformBands.forEach(platform => {
+                const height = platform.bands.top[xi];
+                if (height === null || height === undefined) {
+                    return;
+                }
+                if (height >= yThreshold) {
+                    if (!best || height < best.y) {
+                        const left = platform.bands.top[Math.max(0, xi - 1)];
+                        const right = platform.bands.top[Math.min(WORLD_WIDTH, xi + 1)];
+                        let slope = 0;
+                        if (left !== null && right !== null && left !== undefined && right !== undefined) {
+                            const dy = right - left;
+                            slope = -Math.atan2(dy, 2) * 180 / Math.PI;
+                        }
+                        best = { y: height, slope, source: 'platform' };
+                    }
+                }
+            });
+
+            return best;
+        }
+
+        function getSurfaceBelowY(x, yThreshold) {
+            const groundY = getTerrainHeight(x);
+            let best = null;
+
+            if (groundY >= yThreshold) {
+                best = { y: groundY, slope: getTerrainSlope(x), source: 'ground' };
+            }
+
+            const platformSurface = getPlatformSurfaceAt(x, yThreshold);
+            if (platformSurface && (!best || platformSurface.y < best.y)) {
+                best = platformSurface;
+            }
+
+            if (!best) {
+                return { y: groundY, slope: getTerrainSlope(x), source: 'ground' };
+            }
+
+            return best;
         }
 
         function startGame() {
             document.getElementById('startScreen').style.display = 'none';
             game.isRunning = true;
             game.turnTimeLeft = game.maxTurnTime;
+            game.cameraSnap = true;
             updateTurnTimer();
             updateTurnIndicator();
             setNewWind();
@@ -591,7 +924,7 @@
             // But for projectile physics, convert the displayed world angle back
             const worldAngle = player.angle + player.groundAngle;
             const angleRad = (worldAngle * Math.PI) / 180;
-            const velocity = player.power / 5;
+            const velocity = player.power / 3.8;
             
             projectile = {
                 x: player.x,
@@ -619,12 +952,26 @@
             projectile.x += projectile.vx * dt;
             projectile.y += projectile.vy * dt;
             
+            // Check platform collision
+            if (isPointInPlatform(projectile.x, projectile.y)) {
+                createExplosion(projectile.x, projectile.y);
+                createPlatformCrater(projectile.x, projectile.y);
+                checkHit(projectile.x, projectile.y);
+                game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                projectile = null;
+                switchTurn();
+                return;
+            }
+
             // Check terrain collision
-            const terrainY = getTerrainHeight(projectile.x);
-            if (projectile.y >= terrainY) {
-                createExplosion(projectile.x, terrainY);
-                createCrater(projectile.x, terrainY);
-                checkHit(projectile.x, terrainY);
+            const surface = getSurfaceBelowY(projectile.x, projectile.y);
+            if (projectile.y >= surface.y) {
+                createExplosion(projectile.x, surface.y);
+                if (surface.source === 'ground') {
+                    createCrater(projectile.x, surface.y);
+                }
+                checkHit(projectile.x, surface.y);
+                game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
                 projectile = null;
                 switchTurn();
                 return;
@@ -652,6 +999,7 @@
                 game.cameraShake = 12;
                 
                 createExplosion(projectile.x, projectile.y);
+                game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
                 projectile = null;
                 
                 if (checkPlayer.health <= 0) {
@@ -663,7 +1011,8 @@
             }
             
             // Check boundaries
-            if (projectile.x < 0 || projectile.x > canvas.width || projectile.y > canvas.height) {
+            if (projectile.x < 0 || projectile.x > WORLD_WIDTH || projectile.y > WORLD_HEIGHT) {
+                game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
                 projectile = null;
                 switchTurn();
             }
@@ -709,14 +1058,80 @@
             
             // Don't instantly snap players - they will fall with gravity
             // Just update ground angle for when they land
-            player1.groundAngle = getTerrainSlope(player1.x);
-            player2.groundAngle = getTerrainSlope(player2.x);
+            player1.groundAngle = getSurfaceBelowY(player1.x, player1.y + 40).slope;
+            player2.groundAngle = getSurfaceBelowY(player2.x, player2.y + 40).slope;
+        }
+
+        function createPlatformCrater(x, y) {
+            const craterRadius = 45;
+            const rangeStart = Math.max(1, Math.floor(x - craterRadius * 1.5));
+            const rangeEnd = Math.min(WORLD_WIDTH - 1, Math.ceil(x + craterRadius * 1.5));
+
+            platformBands.forEach(platform => {
+                const top = platform.bands.top;
+                const bottom = platform.bands.bottom;
+                const start = Math.max(0, Math.floor(x - craterRadius));
+                const end = Math.min(WORLD_WIDTH, Math.ceil(x + craterRadius));
+                const xi = Math.round(x);
+                const topAt = top[xi];
+                const bottomAt = bottom[xi];
+                if (topAt === null || bottomAt === null || topAt === undefined || bottomAt === undefined) {
+                    return;
+                }
+                const center = (topAt + bottomAt) / 2;
+                const targetTop = y <= center;
+
+                for (let i = start; i <= end; i++) {
+                    if (top[i] === null || bottom[i] === null || top[i] === undefined || bottom[i] === undefined) {
+                        continue;
+                    }
+                    const distance = Math.abs(i - x);
+                    if (distance < craterRadius) {
+                        const falloff = Math.cos((distance / craterRadius) * Math.PI / 2);
+                        const depression = craterRadius * 0.8 * falloff;
+                        if (targetTop) {
+                            top[i] = Math.min(bottom[i] - 4, top[i] + depression);
+                        } else {
+                            bottom[i] = Math.max(top[i] + 4, bottom[i] - depression);
+                        }
+                    }
+                }
+
+                for (let pass = 0; pass < 2; pass++) {
+                    const next = targetTop ? top.slice() : bottom.slice();
+                    for (let i = rangeStart; i <= rangeEnd; i++) {
+                        if (top[i] === null || top[i] === undefined || bottom[i] === null || bottom[i] === undefined) {
+                            continue;
+                        }
+                        const prev = targetTop ? top[i - 1] : bottom[i - 1];
+                        const curr = targetTop ? top[i] : bottom[i];
+                        const nextVal = targetTop ? top[i + 1] : bottom[i + 1];
+                        if (prev === null || nextVal === null || prev === undefined || nextVal === undefined) {
+                            continue;
+                        }
+                        const average = (prev + curr + nextVal) / 3;
+                        const blended = curr + (average - curr) * 0.35;
+                        next[i] = targetTop
+                            ? Math.min(bottom[i] - 4, blended)
+                            : Math.max(top[i] + 4, blended);
+                    }
+                    for (let i = rangeStart; i <= rangeEnd; i++) {
+                        if (next[i] !== null && next[i] !== undefined) {
+                            if (targetTop) {
+                                top[i] = next[i];
+                            } else {
+                                bottom[i] = next[i];
+                            }
+                        }
+                    }
+                }
+            });
         }
         
-        function smoothTerrain() {
+        function smoothTerrain(passes = 3, strength = 0.45) {
             // Apply smoothing to reduce sharp ups and downs
-            const smoothingPasses = 2;
-            const smoothingStrength = 0.3; // How much to blend with neighbors
+            const smoothingPasses = passes;
+            const smoothingStrength = strength; // How much to blend with neighbors
             
             for (let pass = 0; pass < smoothingPasses; pass++) {
                 const newHeights = [];
@@ -759,9 +1174,10 @@
             }
             
             // Keep players in bounds
-            player.x = Math.max(50, Math.min(1150, player.x));
+            player.x = Math.max(50, Math.min(WORLD_WIDTH - 50, player.x));
             
-            const terrainY = getTerrainHeight(player.x);
+            const surface = getSurfaceBelowY(player.x, player.y + 40);
+            const terrainY = surface.y;
             const playerBottom = player.y + 40; // Player is 40 pixels tall
             
             // Check if player fell into water (die when mostly submerged - 30 pixels into water)
@@ -783,11 +1199,15 @@
                     if (player.y + 40 >= terrainY) {
                         player.y = terrainY - 40;
                         player.vy = 0;
+                        const blended = lerp(player.groundAngle, surface.slope, 0.25);
+                        player.groundAngle = clampAngleDelta(player.groundAngle, blended, 3);
                     }
                 } else {
                     // On ground
                     player.y = terrainY - 40;
                     player.vy = 0;
+                    const blended = lerp(player.groundAngle, surface.slope, 0.25);
+                    player.groundAngle = clampAngleDelta(player.groundAngle, blended, 3);
                 }
             } else {
                 // Terrain is underwater - player falls through
@@ -850,6 +1270,7 @@
         
         function processTurnSwitch() {
             game.currentPlayer = game.currentPlayer === 1 ? 2 : 1;
+            game.cameraHoldX = null;
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
             // Refuel at the start of each turn
             currentPlayerObj.fuel = currentPlayerObj.maxFuel;
@@ -902,7 +1323,7 @@
             }
             
             // Keep within bounds
-            game.botTargetX = Math.max(150, Math.min(canvas.width - 150, game.botTargetX));
+            game.botTargetX = Math.max(150, Math.min(WORLD_WIDTH - 150, game.botTargetX));
             
             // Calculate angle and power to hit player 1
             const dx = player2.x - player1.x; // Positive value (distance to target on left)
@@ -946,7 +1367,7 @@
                     const newX = player2.x + moveDirection * 3;
                     
                     // Check bounds and distance to player 1
-                    if (newX > 50 && newX < canvas.width - 50 && Math.abs(newX - player1.x) > 100) {
+                    if (newX > 50 && newX < WORLD_WIDTH - 50 && Math.abs(newX - player1.x) > 100) {
                         player2.x = newX;
                         // Don't snap Y, let gravity handle it
                         player2.fuel = Math.max(0, player2.fuel - 2);
@@ -1030,6 +1451,11 @@
             
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
             const otherPlayerObj = game.currentPlayer === 1 ? player2 : player1;
+
+            const cameraTargetX = projectile
+                ? projectile.x
+                : (game.cameraHoldX !== null ? game.cameraHoldX : currentPlayerObj.x);
+            updateCamera(cameraTargetX);
             
             // Bot AI update (skip if waiting for turn)
             if (game.currentPlayer === 2 && !game.waitingForTurn && !game.endSlowMo) {
@@ -1046,23 +1472,23 @@
                     if (newX > 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
                         currentPlayerObj.x = newX;
                         // Don't snap Y, let gravity handle it
-                            const newSlope = getTerrainSlope(newX);
-                        currentPlayerObj.groundAngle = getTerrainSlope(currentPlayerObj.x);
+                            const newSurface = getSurfaceBelowY(newX, currentPlayerObj.y + 40);
+                        currentPlayerObj.groundAngle = getSurfaceBelowY(currentPlayerObj.x, currentPlayerObj.y + 40).slope;
                             // More fuel cost going uphill (positive slope when moving left), less downhill
-                            const fuelCost = newSlope > 0 ? 3 : 1.5;
+                            const fuelCost = newSurface.slope > 0 ? 3 : 1.5;
                         currentPlayerObj.fuel = Math.max(0, currentPlayerObj.fuel - fuelCost);
                     }
                 }
                 if (keys['ArrowRight']) {
                     const newX = currentPlayerObj.x + moveSpeed;
                     // Don't go off screen or too close to other player
-                    if (newX < canvas.width - 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
+                    if (newX < WORLD_WIDTH - 50 && Math.abs(newX - otherPlayerObj.x) > 100) {
                         currentPlayerObj.x = newX;
                         // Don't snap Y, let gravity handle it
-                            const newSlope = getTerrainSlope(newX);
-                        currentPlayerObj.groundAngle = getTerrainSlope(currentPlayerObj.x);
+                            const newSurface = getSurfaceBelowY(newX, currentPlayerObj.y + 40);
+                        currentPlayerObj.groundAngle = getSurfaceBelowY(currentPlayerObj.x, currentPlayerObj.y + 40).slope;
                             // More fuel cost going uphill (negative slope when moving right), less downhill
-                            const fuelCost = newSlope < 0 ? 3 : 1.5;
+                            const fuelCost = newSurface.slope < 0 ? 3 : 1.5;
                         currentPlayerObj.fuel = Math.max(0, currentPlayerObj.fuel - fuelCost);
                     }
                 }
@@ -1080,7 +1506,7 @@
             
             // Power charging - PLAYER 1 ONLY (block during waiting)
             if (game.currentPlayer === 1 && currentPlayerObj.charging && !projectile && !game.waitingForTurn && !game.endSlowMo) {
-                currentPlayerObj.power = Math.min(100, currentPlayerObj.power + 2 * dt);
+                currentPlayerObj.power = Math.min(100, currentPlayerObj.power + 1.2 * dt);
             }
             
             // Apply gravity to both players so they fall into craters
@@ -1126,49 +1552,96 @@
         }
 
         function drawTerrain() {
-            ctx.fillStyle = '#2d5016';
+            ctx.fillStyle = groundStyle.fill;
             ctx.beginPath();
-            ctx.moveTo(0, canvas.height);
+            ctx.moveTo(0, WORLD_HEIGHT);
             for (let point of terrain) {
                 ctx.lineTo(point.x, point.y);
             }
-            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(WORLD_WIDTH, WORLD_HEIGHT);
             ctx.closePath();
             ctx.fill();
-            
-            // Grass top
-            ctx.strokeStyle = '#4a7c1f';
-            ctx.lineWidth = 3;
+
+            ctx.strokeStyle = groundStyle.stroke;
+            ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, terrain[0].y);
             for (let point of terrain) {
                 ctx.lineTo(point.x, point.y);
             }
             ctx.stroke();
+
+            platformBands.forEach(platform => {
+                const top = platform.bands.top;
+                const bottom = platform.bands.bottom;
+                let i = 0;
+                while (i < top.length) {
+                    while (i < top.length && (top[i] === null || top[i] === undefined || bottom[i] === null || bottom[i] === undefined)) {
+                        i++;
+                    }
+                    if (i >= top.length) {
+                        break;
+                    }
+                    const start = i;
+                    while (i < top.length && top[i] !== null && top[i] !== undefined && bottom[i] !== null && bottom[i] !== undefined) {
+                        i++;
+                    }
+                    const end = i - 1;
+
+                    ctx.fillStyle = platform.fill;
+                    ctx.strokeStyle = platform.stroke;
+                    ctx.lineWidth = 2;
+                    ctx.lineJoin = 'round';
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(start, top[start]);
+                    for (let x = start; x <= end; x++) {
+                        ctx.lineTo(x, top[x]);
+                    }
+                    for (let x = end; x >= start; x--) {
+                        ctx.lineTo(x, bottom[x]);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.moveTo(start, top[start]);
+                    for (let x = start + 1; x <= end; x++) {
+                        const prevY = top[x - 1];
+                        const currY = top[x];
+                        if (Math.abs(currY - prevY) > 10) {
+                            ctx.moveTo(x, currY);
+                        } else {
+                            ctx.lineTo(x, currY);
+                        }
+                    }
+                    ctx.stroke();
+                }
+            });
         }
 
         function drawWater() {
             // Water body
-            ctx.fillStyle = 'rgba(52, 152, 219, 0.6)';
-            ctx.fillRect(0, WATER_LEVEL, canvas.width, canvas.height - WATER_LEVEL);
-            
+            ctx.fillStyle = MAP01.water.fill;
+            ctx.fillRect(0, WATER_LEVEL, WORLD_WIDTH, WORLD_HEIGHT - WATER_LEVEL);
+
             // Wave animation
-            ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+            ctx.strokeStyle = MAP01.water.stroke;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            for (let x = 0; x <= canvas.width; x += 15) {
+            for (let x = 0; x <= WORLD_WIDTH; x += 15) {
                 const waveOffset = Math.sin(x * 0.02 + Date.now() * 0.003) * 3;
                 if (x === 0) ctx.moveTo(x, WATER_LEVEL + waveOffset);
                 else ctx.lineTo(x, WATER_LEVEL + waveOffset);
             }
             ctx.stroke();
-            
+
             // Water surface line
-            ctx.strokeStyle = 'rgba(100, 180, 220, 0.9)';
+            ctx.strokeStyle = MAP01.water.stroke;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, WATER_LEVEL);
-            ctx.lineTo(canvas.width, WATER_LEVEL);
+            ctx.lineTo(WORLD_WIDTH, WATER_LEVEL);
             ctx.stroke();
         }
 
@@ -1230,7 +1703,9 @@
             }
             
             ctx.restore();
-            
+        }
+
+        function drawPlayerHud(player) {
             // Health/Fuel bars (top corners)
             const barWidth = 120;
             const barHeight = 12;
@@ -1362,34 +1837,38 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Apply camera shake
+            // Apply camera and shake to world rendering
             ctx.save();
-            ctx.translate(game.cameraShakeX, game.cameraShakeY);
-            
+            ctx.translate(-camera.x + game.cameraShakeX, game.cameraShakeY);
+
             drawTerrain();
-            
+
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
-            
+
             drawPlayer(player1, game.currentPlayer === 1);
             drawPlayer(player2, game.currentPlayer === 2);
-            
+
             drawPowerBar(currentPlayerObj);
             drawProjectile();
             drawExplosions();
-            
+
             // Draw water on top so it covers submerged players
             drawWater();
-            
-            ctx.restore();
-            
+
             // Player labels
             ctx.fillStyle = player1.color;
             ctx.font = 'bold 14px Poppins';
             ctx.textAlign = 'center';
             ctx.fillText('P1', player1.x, player1.y + 60);
-            
+
             ctx.fillStyle = player2.color;
             ctx.fillText('P2', player2.x, player2.y + 60);
+
+            ctx.restore();
+
+            // HUD
+            drawPlayerHud(player1);
+            drawPlayerHud(player2);
         }
 
         function gameLoop() {
