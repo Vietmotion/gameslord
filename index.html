@@ -474,6 +474,7 @@
         <div style="margin-left: auto; display: flex; align-items: center; gap: 15px;">
             <div id="userSection" style="display: flex; align-items: center; gap: 12px;">
                 <span id="userEmail" style="color: #4ecdc4; font-size: 14px; display: none;"></span>
+                <button id="adminBtn" style="padding: 8px 18px; font-size: 14px; font-weight: 600; background: rgba(255, 215, 0, 0.15); color: #ffe08a; border: 1px solid rgba(255, 215, 0, 0.5); border-radius: 8px; cursor: pointer; display: none;">Admin</button>
                 <button id="myPageBtn" style="padding: 8px 18px; font-size: 14px; font-weight: 600; background: rgba(78, 205, 196, 0.15); color: #4ecdc4; border: 1px solid rgba(78, 205, 196, 0.5); border-radius: 8px; cursor: pointer; display: none;">Profile</button>
                 <button id="loginBtn" style="padding: 8px 20px; font-size: 14px; font-weight: 600; background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%); color: white; border: none; border-radius: 8px; cursor: pointer;">Login</button>
                 <button id="logoutBtn" style="padding: 8px 20px; font-size: 14px; font-weight: 600; background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; cursor: pointer; display: none;">Logout</button>
@@ -634,6 +635,7 @@
         let currentUser = null;
         let isLoginMode = true;
         const playsCollectionName = 'gamePlays';
+        const ADMIN_EMAIL = 'viet.motiondesign@gmail.com';
 
         function initFirebase() {
             const missingConfig = Object.values(firebaseConfig).some(value => String(value).startsWith('YOUR_'));
@@ -658,6 +660,7 @@
             const loginBtn = document.getElementById('loginBtn');
             const logoutBtn = document.getElementById('logoutBtn');
             const userEmail = document.getElementById('userEmail');
+            const adminBtn = document.getElementById('adminBtn');
             const myPageBtn = document.getElementById('myPageBtn');
             
             if (user) {
@@ -666,11 +669,17 @@
                 userEmail.style.display = 'block';
                 userEmail.textContent = user.email;
                 myPageBtn.style.display = 'inline-flex';
+                if ((user.email || '').toLowerCase() === ADMIN_EMAIL) {
+                    adminBtn.style.display = 'inline-flex';
+                } else {
+                    adminBtn.style.display = 'none';
+                }
             } else {
                 loginBtn.style.display = 'block';
                 logoutBtn.style.display = 'none';
                 userEmail.style.display = 'none';
                 myPageBtn.style.display = 'none';
+                adminBtn.style.display = 'none';
             }
         }
 
@@ -702,6 +711,27 @@
             document.getElementById('authError').style.display = 'none';
         }
 
+        function getFriendlyAuthError(error) {
+            if (!error || !error.code) {
+                return 'Authentication failed. Please try again.';
+            }
+
+            if (error.code === 'auth/unauthorized-domain') {
+                const host = window.location.hostname || 'your-domain.com';
+                return `Google sign-in is blocked for this domain (${host}). Add it in Firebase Console > Authentication > Settings > Authorized domains, then retry.`;
+            }
+
+            if (error.code === 'auth/popup-blocked') {
+                return 'Popup was blocked by the browser. Allow popups for this site and try again.';
+            }
+
+            if (error.code === 'auth/popup-closed-by-user') {
+                return 'Sign-in popup was closed before completing login.';
+            }
+
+            return error.message || 'Authentication failed. Please try again.';
+        }
+
         async function handleAuth(event) {
             event.preventDefault();
             const email = document.getElementById('authEmail').value;
@@ -718,7 +748,7 @@
                 document.getElementById('authEmail').value = '';
                 document.getElementById('authPassword').value = '';
             } catch (error) {
-                errorEl.textContent = error.message;
+                errorEl.textContent = getFriendlyAuthError(error);
                 errorEl.style.display = 'block';
             }
         }
@@ -738,7 +768,7 @@
                 closeAuthModal();
             } catch (error) {
                 const errorEl = document.getElementById('authError');
-                errorEl.textContent = error.message;
+                errorEl.textContent = getFriendlyAuthError(error);
                 errorEl.style.display = 'block';
             }
         }
@@ -746,6 +776,9 @@
         // Event listeners
         document.getElementById('loginBtn').addEventListener('click', openAuthModal);
         document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+        document.getElementById('adminBtn').addEventListener('click', () => {
+            window.location.href = 'admin.html';
+        });
         document.getElementById('myPageBtn').addEventListener('click', () => {
             window.location.href = 'profile.html';
         });

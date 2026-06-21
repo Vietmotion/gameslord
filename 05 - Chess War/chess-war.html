@@ -15,10 +15,49 @@
             font-family: 'Arial', sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            justify-content: flex-start;
             align-items: center;
             min-height: 100vh;
             color: white;
+            overflow-x: hidden;
+        }
+
+        #menuBar {
+            width: 100%;
+            height: clamp(50px, 8vh, 70px);
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 clamp(15px, 3vw, 40px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(78, 205, 196, 0.2);
+            position: relative;
+            z-index: 10;
+        }
+
+        #homeButton {
+            padding: 12px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            letter-spacing: 0.5px;
+        }
+
+        #homeButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        #homeButton:active {
+            transform: translateY(0);
         }
 
         #gameContainer {
@@ -26,10 +65,40 @@
             flex-direction: column;
             gap: 0;
             padding: 20px;
+            margin: 20px;
             align-items: center;
             border: 4px solid #ffd700;
             background: #2d2d44;
             max-width: 1300px;
+            position: relative;
+        }
+
+        #readyOverlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(8, 8, 18, 0.12);
+            font-weight: 700;
+            color: #ffd700;
+            text-shadow: 0 0 24px rgba(255, 215, 0, 0.6);
+            z-index: 20;
+            pointer-events: none;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+
+        #readyOverlayMain {
+            font-size: 54px;
+            line-height: 1.1;
+        }
+
+        #readyOverlayHint {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #fff7d1;
+            letter-spacing: 0.8px;
         }
 
         #gameView {
@@ -230,6 +299,106 @@
             display: none;
         }
 
+        #balancePanel {
+            width: 100%;
+            margin: 8px 0 12px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 215, 0, 0.35);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+
+        #balancePanel h3 {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #ffd700;
+            letter-spacing: 0.6px;
+        }
+
+        #pieceStatsTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        #pieceStatsTable th,
+        #pieceStatsTable td {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 5px 6px;
+            text-align: center;
+        }
+
+        #pieceStatsTable th {
+            color: #ffe9a0;
+            font-weight: 700;
+        }
+
+        .balanceMeta {
+            margin-top: 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.82);
+            line-height: 1.45;
+        }
+
+        #autoTestControls {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        #autoTestControls input {
+            width: 80px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+        }
+
+        #runAutoTestBtn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 215, 0, 0.55);
+            background: rgba(255, 215, 0, 0.14);
+            color: #ffe9a0;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        #runAutoTestBtn:hover {
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        #autoTestResult {
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        #buyFeedback {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        #buyFeedback.success {
+            color: #7ef7ae;
+            border-color: rgba(126, 247, 174, 0.6);
+        }
+
+        #buyFeedback.error {
+            color: #ff9b9b;
+            border-color: rgba(255, 155, 155, 0.6);
+        }
+
         #instructions {
             background: rgba(0, 0, 0, 0.7);
             padding: 15px;
@@ -250,16 +419,49 @@
     </style>
 </head>
 <body>
+    <div id="menuBar">
+        <button id="homeButton" onclick="window.location.href='../index.html'">← HOME</button>
+    </div>
+
     <div id="gameContainer">
         <h1 id="gameTitle">⚔️ CHESS WAR ⚔️</h1>
+        <div id="readyOverlay">
+            <div>
+                <div id="readyOverlayMain">PREPARE 5</div>
+                <div id="readyOverlayHint">Buy and place your pieces</div>
+            </div>
+        </div>
         
         <div id="gameStats">
-            <div id="turnDisplay">Turn: <span id="turnCount">0</span></div>
             <div id="cooldownDisplay">
                 ⏱️ 
                 <div id="cooldownBar"><div id="cooldownBarFill"></div></div>
                 <span id="cooldownText">4.0s</span>
             </div>
+        </div>
+
+        <div id="balancePanel">
+            <h3>Balance Monitor</h3>
+            <table id="pieceStatsTable">
+                <thead>
+                    <tr>
+                        <th>Piece</th>
+                        <th>Price</th>
+                        <th>HP</th>
+                        <th>DMG</th>
+                        <th>Move</th>
+                        <th>Atk CD</th>
+                    </tr>
+                </thead>
+                <tbody id="pieceStatsBody"></tbody>
+            </table>
+            <div class="balanceMeta" id="balanceMeta"></div>
+            <div id="autoTestControls">
+                <label for="autoTestRuns">Auto test runs</label>
+                <input id="autoTestRuns" type="number" min="5" max="500" value="50">
+                <button id="runAutoTestBtn" type="button">Run AI Test</button>
+            </div>
+            <div id="autoTestResult">Run AI Test to estimate balance without manual play.</div>
         </div>
         
         <div id="gameView">
@@ -300,6 +502,8 @@
                 <div class="cooldown" id="p2Cooldown"></div>
             </div>
         </div>
+
+        <div id="buyFeedback">Select a piece, then click your deployment row to place it.</div>
     </div>
 
     <script>
@@ -311,8 +515,12 @@
         const TILE_WIDTH = 130;
         const TILE_HEIGHT = 65;
         const PIECE_SCALE = 70;
-        const ACTION_COOLDOWN = 4000; // 4 seconds
-        const BUYING_COOLDOWN = 4000; // 4 seconds
+        const ACTION_COOLDOWN = 1500; // 1.5 seconds
+        const BUYING_COOLDOWN = 1000; // 1 second
+        const READY_DURATION = 5000; // 5 seconds
+        const COIN_TICK_INTERVAL = 1000; // 1 second
+        const COIN_TICK_AMOUNT = 2; // +2 coins/sec
+        const AUTO_TEST_MAX_STEPS = 220;
 
         // Piece costs and stats
         const PIECE_DATA = {
@@ -328,15 +536,18 @@
             board: Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null)),
             pieces: [],
             players: [
-                { id: 1, coins: 50, color: '#4a90e2' },
-                { id: 2, coins: 50, color: '#e24a4a' }
+                { id: 1, coins: 50, color: '#4a90e2', lastBuyTime: 0 },
+                { id: 2, coins: 50, color: '#e24a4a', lastBuyTime: 0 }
             ],
             selectedPieceType: null,
             selectedPlayer: null,
             gameStartTime: Date.now(),
-            turnCount: 0,
-            lastTurnTime: Date.now()
+            matchStartAt: Date.now() + READY_DURATION,
+            isMatchStarted: false,
+            lastCoinTickAt: Date.now()
         };
+
+        let feedbackTimeout = null;
 
         // Piece class
         class Piece {
@@ -349,7 +560,6 @@
                 this.maxHealth = PIECE_DATA[type].health;
                 this.damage = PIECE_DATA[type].damage;
                 this.moveRange = PIECE_DATA[type].moveRange;
-                this.lastActionTurn = gameState.turnCount;
                 this.id = Math.random();
                 this.hitTime = 0;
                 this.fadeOut = false;
@@ -358,42 +568,54 @@
                 // Animation states
                 this.isMoving = false;
                 this.moveStartTime = 0;
-                this.moveDuration = 600; // 600ms movement animation
+                this.moveDuration = 1000; // 1s movement animation
                 this.targetRow = row;
                 this.targetCol = col;
+                this.lockedTargetId = null;
+                this.behaviorState = 'seeking';
+                this.prevRow = row;
+                this.prevCol = col;
                 
                 // Attack cooldown - independent from movement
                 this.lastAttackTime = Date.now();
-                this.attackCooldown = 1000; // 1 second
+                this.attackCooldown = 1500; // 1.5 seconds
             }
             
             canAttack() {
                 return Date.now() - this.lastAttackTime >= this.attackCooldown;
             }
 
-            canAct() {
-                return gameState.turnCount > this.lastActionTurn;
-            }
-
             update() {
-                if (!this.canAct()) return;
+                if (this.isMoving) return;
 
                 if (this.type === 'king') return; // Kings don't move
 
-                const enemy = this.findTarget();
-                
-                if (enemy) {
-                    const distance = Math.abs(this.row - enemy.row) + Math.abs(this.col - enemy.col);
-                    
-                    // Check if adjacent
-                    if (distance === 1 || (distance === Math.sqrt(2) && this.isAdjacent(enemy))) {
-                        // Don't move, just prepare for attack
-                    } else {
-                        this.moveToward(enemy);
-                    }
+                const adjacentEnemy = this.findAdjacentEnemy();
+                if (adjacentEnemy) {
+                    // Once pieces engage, lock both pieces in place to fight to the death.
+                    this.lockedTargetId = adjacentEnemy.id;
+                    adjacentEnemy.lockedTargetId = this.id;
+                    this.behaviorState = 'engaged';
+                    adjacentEnemy.behaviorState = 'engaged';
+                    return;
                 }
 
-                this.lastActionTurn = gameState.turnCount;
+                const enemy = this.resolveTarget();
+                
+                if (enemy) {
+                    // Already in contact with target: hold position and fight.
+                    if (this.isAdjacent(enemy)) {
+                        this.behaviorState = 'engaged';
+                        // Don't move, just prepare for attack
+                    } else {
+                        const moved = this.moveToward(enemy);
+                        if (!moved) {
+                            this.behaviorState = 'defending';
+                        }
+                    }
+                } else {
+                    this.behaviorState = 'seeking';
+                }
             }
             
             updateAttack() {
@@ -402,16 +624,37 @@
                 
                 if (this.type === 'king') return; // Kings don't attack
                 
-                const enemy = this.findTarget();
+                const enemy = this.resolveTarget();
                 if (!enemy) return;
-                
-                const distance = Math.abs(this.row - enemy.row) + Math.abs(this.col - enemy.col);
-                
+
                 // Check if adjacent and can attack
-                if (distance === 1 || (distance === Math.sqrt(2) && this.isAdjacent(enemy))) {
+                if (this.isAdjacent(enemy)) {
                     this.attack(enemy);
                     this.lastAttackTime = Date.now();
                 }
+            }
+
+            findAdjacentEnemy() {
+                return gameState.pieces.find(
+                    p => p.player !== this.player && p.health > 0 && this.isAdjacent(p)
+                ) || null;
+            }
+
+            resolveTarget() {
+                if (this.lockedTargetId !== null) {
+                    const lockedTarget = gameState.pieces.find(p => p.id === this.lockedTargetId && p.health > 0);
+                    if (lockedTarget) {
+                        return lockedTarget;
+                    }
+                    this.lockedTargetId = null;
+                    this.behaviorState = 'seeking';
+                }
+
+                const newTarget = this.findTarget();
+                if (newTarget) {
+                    this.lockedTargetId = newTarget.id;
+                }
+                return newTarget;
             }
 
             isAdjacent(other) {
@@ -450,26 +693,46 @@
             moveToward(target) {
                 let bestMove = null;
                 let bestDist = Infinity;
+                const currentDist = Math.abs(this.row - target.row) + Math.abs(this.col - target.col);
 
                 const moves = this.getPossibleMoves();
                 
                 for (const move of moves) {
                     const dist = Math.abs(move.row - target.row) + Math.abs(move.col - target.col);
-                    if (dist < bestDist) {
+                    if (dist > currentDist) {
+                        continue;
+                    }
+
+                    let score = dist;
+                    if (move.row === this.prevRow && move.col === this.prevCol) {
+                        score += 1.5;
+                    }
+
+                    if (score < bestDist) {
                         bestDist = dist;
                         bestMove = move;
                     }
                 }
 
+                if (bestMove && bestDist >= currentDist) {
+                    bestMove = null;
+                }
+
                 if (bestMove) {
+                    this.prevRow = this.row;
+                    this.prevCol = this.col;
                     gameState.board[this.row][this.col] = null;
                     this.targetRow = bestMove.row;
                     this.targetCol = bestMove.col;
                     this.isMoving = true;
                     this.moveStartTime = Date.now();
+                    this.behaviorState = 'seeking';
                     // Update board immediately for collision detection
                     gameState.board[bestMove.row][bestMove.col] = this;
+                    return true;
                 }
+
+                return false;
             }
             
             updateAnimation() {
@@ -505,7 +768,14 @@
                 const moves = [];
 
                 if (this.type === 'pawn') {
-                    const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                    const forward = this.player === 1 ? -1 : 1;
+                    const directions = [
+                        [forward, 0],
+                        [forward, 1],
+                        [forward, -1],
+                        [0, 1],
+                        [0, -1]
+                    ];
                     for (const [dr, dc] of directions) {
                         const newRow = this.row + dr;
                         const newCol = this.col + dc;
@@ -561,6 +831,9 @@
                 enemy.hitTime = Date.now(); // Trigger hit effect
                 
                 if (enemy.health <= 0) {
+                    if (this.lockedTargetId === enemy.id) {
+                        this.lockedTargetId = null;
+                    }
                     enemy.fadeOut = true;
                     enemy.fadeOutTime = Date.now();
                     this.removePiece(enemy);
@@ -844,13 +1117,459 @@
             }
         }
 
+        function updateReadyOverlay() {
+            if (gameState.isMatchStarted) {
+                return;
+            }
+
+            const overlay = document.getElementById('readyOverlay');
+            const overlayMain = document.getElementById('readyOverlayMain');
+            const remainingMs = gameState.matchStartAt - Date.now();
+
+            if (remainingMs <= 0) {
+                gameState.isMatchStarted = true;
+                overlay.style.display = 'none';
+                return;
+            }
+
+            const remainingSeconds = Math.ceil(remainingMs / 1000);
+            overlayMain.textContent = `PREPARE ${remainingSeconds}`;
+        }
+
+        function setBuyFeedback(message, tone = '') {
+            const el = document.getElementById('buyFeedback');
+            el.textContent = message;
+            el.className = tone ? tone : '';
+
+            if (feedbackTimeout) {
+                clearTimeout(feedbackTimeout);
+            }
+
+            if (tone) {
+                feedbackTimeout = setTimeout(() => {
+                    el.className = '';
+                }, 1800);
+            }
+        }
+
+        function renderBalancePanel() {
+            const tbody = document.getElementById('pieceStatsBody');
+            const order = ['pawn', 'bishop', 'rook', 'knight'];
+            const rows = order.map(type => {
+                const piece = PIECE_DATA[type];
+                return `<tr>
+                    <td>${piece.symbol} ${type}</td>
+                    <td>${piece.cost}</td>
+                    <td>${piece.health}</td>
+                    <td>${piece.damage}</td>
+                    <td>${piece.moveRange}</td>
+                    <td>${(ACTION_COOLDOWN / 1000).toFixed(1)}s</td>
+                </tr>`;
+            }).join('');
+            tbody.innerHTML = rows;
+
+            document.getElementById('balanceMeta').textContent =
+                `Passive income: +${COIN_TICK_AMOUNT}/sec | Buy cooldown: ${(BUYING_COOLDOWN / 1000).toFixed(1)}s | Prep: ${(READY_DURATION / 1000)}s`;
+        }
+
+        function getTeamMetrics(playerId) {
+            const teamPieces = gameState.pieces.filter(p => p.player === playerId && p.health > 0);
+            const king = teamPieces.find(p => p.type === 'king');
+            const fighters = teamPieces.filter(p => p.type !== 'king');
+
+            const totalHP = fighters.reduce((sum, p) => sum + p.health, 0);
+            const totalValue = fighters.reduce((sum, p) => sum + (PIECE_DATA[p.type].cost || 0), 0);
+            const totalDps = fighters.reduce((sum, p) => sum + (p.damage / (p.attackCooldown / 1000)), 0);
+            const engaged = fighters.filter(p => p.behaviorState === 'engaged').length;
+            const defending = fighters.filter(p => p.behaviorState === 'defending').length;
+            const seeking = fighters.filter(p => p.behaviorState === 'seeking').length;
+
+            const pressureSum = fighters.reduce((sum, p) => {
+                const progress = p.player === 1 ? (7 - p.row) : p.row;
+                return sum + progress;
+            }, 0);
+            const avgPressure = fighters.length ? (pressureSum / fighters.length) : 0;
+
+            const kingHP = king ? king.health : 0;
+            const score = (totalHP * 1.2) + (totalDps * 8) + (totalValue * 0.35) + (kingHP * 2) + (avgPressure * 3);
+
+            return {
+                fighters: fighters.length,
+                totalHP,
+                totalValue,
+                totalDps,
+                kingHP,
+                engaged,
+                defending,
+                seeking,
+                avgPressure,
+                score
+            };
+        }
+
+        function createAutoBoard() {
+            return Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+        }
+
+        function autoIsValid(row, col) {
+            return row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE;
+        }
+
+        function autoGetAdjacentEnemy(piece, pieces) {
+            for (const candidate of pieces) {
+                if (candidate.player === piece.player || candidate.health <= 0) {
+                    continue;
+                }
+                const dr = Math.abs(piece.row - candidate.row);
+                const dc = Math.abs(piece.col - candidate.col);
+                if (dr <= 1 && dc <= 1 && dr + dc > 0) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
+        function autoPickTarget(piece, pieces) {
+            const enemies = pieces.filter(p => p.player !== piece.player && p.health > 0);
+            if (enemies.length === 0) {
+                return null;
+            }
+            return enemies.reduce((nearest, enemy) => {
+                const d1 = Math.abs(piece.row - nearest.row) + Math.abs(piece.col - nearest.col);
+                const d2 = Math.abs(piece.row - enemy.row) + Math.abs(piece.col - enemy.col);
+                return d2 < d1 ? enemy : nearest;
+            });
+        }
+
+        function autoGetPossibleMoves(piece, board) {
+            const moves = [];
+            if (piece.type === 'pawn') {
+                const forward = piece.player === 1 ? -1 : 1;
+                const dirs = [
+                    [forward, 0], [forward, 1], [forward, -1], [0, 1], [0, -1]
+                ];
+                for (const [dr, dc] of dirs) {
+                    const nr = piece.row + dr;
+                    const nc = piece.col + dc;
+                    if (autoIsValid(nr, nc) && !board[nr][nc]) {
+                        moves.push({ row: nr, col: nc });
+                    }
+                }
+            } else if (piece.type === 'bishop') {
+                const dirs = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+                for (const [dr, dc] of dirs) {
+                    for (let i = 1; i <= piece.moveRange; i++) {
+                        const nr = piece.row + dr * i;
+                        const nc = piece.col + dc * i;
+                        if (!autoIsValid(nr, nc) || board[nr][nc]) {
+                            break;
+                        }
+                        moves.push({ row: nr, col: nc });
+                    }
+                }
+            } else if (piece.type === 'rook') {
+                const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                for (const [dr, dc] of dirs) {
+                    for (let i = 1; i <= piece.moveRange; i++) {
+                        const nr = piece.row + dr * i;
+                        const nc = piece.col + dc * i;
+                        if (!autoIsValid(nr, nc) || board[nr][nc]) {
+                            break;
+                        }
+                        moves.push({ row: nr, col: nc });
+                    }
+                }
+            } else if (piece.type === 'knight') {
+                const jumps = [
+                    [2, 1], [2, -1], [-2, 1], [-2, -1],
+                    [1, 2], [1, -2], [-1, 2], [-1, -2]
+                ];
+                for (const [dr, dc] of jumps) {
+                    const nr = piece.row + dr;
+                    const nc = piece.col + dc;
+                    if (autoIsValid(nr, nc) && !board[nr][nc]) {
+                        moves.push({ row: nr, col: nc });
+                    }
+                }
+            }
+            return moves;
+        }
+
+        function autoMoveToward(piece, target, board) {
+            const moves = autoGetPossibleMoves(piece, board);
+            if (moves.length === 0) {
+                piece.behaviorState = 'defending';
+                return;
+            }
+
+            const currentDist = Math.abs(piece.row - target.row) + Math.abs(piece.col - target.col);
+            let best = null;
+            let bestScore = Infinity;
+            for (const m of moves) {
+                const dist = Math.abs(m.row - target.row) + Math.abs(m.col - target.col);
+                if (dist > currentDist) {
+                    continue;
+                }
+                let score = dist;
+                if (m.row === piece.prevRow && m.col === piece.prevCol) {
+                    score += 1.5;
+                }
+                if (score < bestScore) {
+                    bestScore = score;
+                    best = m;
+                }
+            }
+
+            if (!best || bestScore >= currentDist) {
+                piece.behaviorState = 'defending';
+                return;
+            }
+
+            board[piece.row][piece.col] = null;
+            piece.prevRow = piece.row;
+            piece.prevCol = piece.col;
+            piece.row = best.row;
+            piece.col = best.col;
+            board[piece.row][piece.col] = piece;
+            piece.behaviorState = 'seeking';
+        }
+
+        function autoSelectBuyType(coins) {
+            const rand = Math.random();
+            if (coins >= 70) {
+                if (rand < 0.45) return 'knight';
+                if (rand < 0.8) return 'rook';
+                return 'bishop';
+            }
+            if (coins >= 50) {
+                if (rand < 0.5) return 'rook';
+                if (rand < 0.85) return 'bishop';
+                return 'pawn';
+            }
+            if (coins >= 30) {
+                return rand < 0.55 ? 'bishop' : 'pawn';
+            }
+            if (coins >= 10) {
+                return 'pawn';
+            }
+            return null;
+        }
+
+        function autoPlaceBuy(playerId, players, pieces, board, nextIdRef) {
+            const buyer = players[playerId - 1];
+            const pick = autoSelectBuyType(buyer.coins);
+            if (!pick) {
+                return;
+            }
+
+            const cost = PIECE_DATA[pick].cost;
+            if (buyer.coins < cost) {
+                return;
+            }
+
+            const rows = playerId === 1 ? [7, 6] : [0, 1];
+            const empty = [];
+            for (const row of rows) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (!board[row][col]) {
+                        empty.push({ row, col });
+                    }
+                }
+            }
+
+            if (empty.length === 0) {
+                return;
+            }
+
+            const slot = empty[Math.floor(Math.random() * empty.length)];
+            buyer.coins -= cost;
+            const piece = {
+                id: nextIdRef.value++,
+                type: pick,
+                player: playerId,
+                row: slot.row,
+                col: slot.col,
+                prevRow: slot.row,
+                prevCol: slot.col,
+                health: PIECE_DATA[pick].health,
+                damage: PIECE_DATA[pick].damage,
+                moveRange: PIECE_DATA[pick].moveRange,
+                attackCooldown: Math.max(1, Math.round(ACTION_COOLDOWN / 500)),
+                attackTimer: 0,
+                lockedTargetId: null,
+                behaviorState: 'seeking'
+            };
+            pieces.push(piece);
+            board[slot.row][slot.col] = piece;
+        }
+
+        function simulateAutoBattle() {
+            const board = createAutoBoard();
+            const players = [{ coins: 50 }, { coins: 50 }];
+            const pieces = [];
+            const nextIdRef = { value: 1 };
+
+            const kingA = {
+                id: nextIdRef.value++, type: 'king', player: 1, row: 7, col: 4,
+                prevRow: 7, prevCol: 4, health: PIECE_DATA.king.health,
+                damage: 0, moveRange: 0, attackCooldown: 9999, attackTimer: 9999,
+                lockedTargetId: null, behaviorState: 'defending'
+            };
+            const kingB = {
+                id: nextIdRef.value++, type: 'king', player: 2, row: 0, col: 4,
+                prevRow: 0, prevCol: 4, health: PIECE_DATA.king.health,
+                damage: 0, moveRange: 0, attackCooldown: 9999, attackTimer: 9999,
+                lockedTargetId: null, behaviorState: 'defending'
+            };
+            pieces.push(kingA, kingB);
+            board[7][4] = kingA;
+            board[0][4] = kingB;
+
+            const prepTicks = Math.max(1, Math.floor(READY_DURATION / 1000));
+            for (let t = 0; t < prepTicks; t++) {
+                players[0].coins += COIN_TICK_AMOUNT;
+                players[1].coins += COIN_TICK_AMOUNT;
+                autoPlaceBuy(1, players, pieces, board, nextIdRef);
+                autoPlaceBuy(2, players, pieces, board, nextIdRef);
+            }
+
+            for (let step = 0; step < AUTO_TEST_MAX_STEPS; step++) {
+                for (const p of pieces) {
+                    if (p.health <= 0 || p.type === 'king') {
+                        continue;
+                    }
+
+                    const adjacent = autoGetAdjacentEnemy(p, pieces);
+                    if (adjacent) {
+                        p.lockedTargetId = adjacent.id;
+                        p.behaviorState = 'engaged';
+                        continue;
+                    }
+
+                    let target = null;
+                    if (p.lockedTargetId !== null) {
+                        target = pieces.find(x => x.id === p.lockedTargetId && x.health > 0);
+                    }
+                    if (!target) {
+                        target = autoPickTarget(p, pieces);
+                        p.lockedTargetId = target ? target.id : null;
+                    }
+
+                    if (target) {
+                        autoMoveToward(p, target, board);
+                    } else {
+                        p.behaviorState = 'defending';
+                    }
+                }
+
+                for (const p of pieces) {
+                    if (p.health <= 0 || p.type === 'king') {
+                        continue;
+                    }
+
+                    if (p.attackTimer > 0) {
+                        p.attackTimer -= 1;
+                        continue;
+                    }
+
+                    let target = null;
+                    if (p.lockedTargetId !== null) {
+                        target = pieces.find(x => x.id === p.lockedTargetId && x.health > 0);
+                    }
+                    if (!target || !autoGetAdjacentEnemy(p, [target])) {
+                        target = autoGetAdjacentEnemy(p, pieces);
+                        p.lockedTargetId = target ? target.id : null;
+                    }
+
+                    if (!target) {
+                        continue;
+                    }
+
+                    target.health -= p.damage;
+                    p.attackTimer = Math.max(1, Math.round(ACTION_COOLDOWN / 500));
+                    if (target.health <= 0) {
+                        board[target.row][target.col] = null;
+                    }
+                }
+
+                const p1KingAlive = pieces.some(p => p.type === 'king' && p.player === 1 && p.health > 0);
+                const p2KingAlive = pieces.some(p => p.type === 'king' && p.player === 2 && p.health > 0);
+
+                if (!p1KingAlive || !p2KingAlive) {
+                    if (p1KingAlive && !p2KingAlive) return { winner: 1, steps: step + 1 };
+                    if (p2KingAlive && !p1KingAlive) return { winner: 2, steps: step + 1 };
+                    return { winner: 0, steps: step + 1 };
+                }
+            }
+
+            const p1Score = pieces.filter(p => p.player === 1 && p.health > 0)
+                .reduce((sum, p) => sum + p.health + (PIECE_DATA[p.type].cost || 0) * 0.2, 0);
+            const p2Score = pieces.filter(p => p.player === 2 && p.health > 0)
+                .reduce((sum, p) => sum + p.health + (PIECE_DATA[p.type].cost || 0) * 0.2, 0);
+
+            if (Math.abs(p1Score - p2Score) < 0.5) {
+                return { winner: 0, steps: AUTO_TEST_MAX_STEPS };
+            }
+            return { winner: p1Score > p2Score ? 1 : 2, steps: AUTO_TEST_MAX_STEPS };
+        }
+
+        function runAutoBalanceTest() {
+            const input = document.getElementById('autoTestRuns');
+            const resultEl = document.getElementById('autoTestResult');
+            const runs = Math.max(5, Math.min(500, parseInt(input.value, 10) || 50));
+
+            let p1Wins = 0;
+            let p2Wins = 0;
+            let draws = 0;
+            let totalSteps = 0;
+
+            for (let i = 0; i < runs; i++) {
+                const out = simulateAutoBattle();
+                totalSteps += out.steps;
+                if (out.winner === 1) p1Wins += 1;
+                else if (out.winner === 2) p2Wins += 1;
+                else draws += 1;
+            }
+
+            const p1Rate = (p1Wins / runs) * 100;
+            const p2Rate = (p2Wins / runs) * 100;
+            const drawRate = (draws / runs) * 100;
+            const avgLen = totalSteps / runs;
+
+            let verdict = 'Looks roughly balanced.';
+            const gap = Math.abs(p1Rate - p2Rate);
+            if (gap >= 15) {
+                verdict = p1Rate > p2Rate ? 'P1 side appears advantaged.' : 'P2 side appears advantaged.';
+            }
+
+            resultEl.innerHTML =
+                `Results (${runs} runs): P1 ${p1Rate.toFixed(1)}% | P2 ${p2Rate.toFixed(1)}% | Draw ${drawRate.toFixed(1)}%<br>` +
+                `Avg fight length: ${avgLen.toFixed(1)} ticks. ${verdict}`;
+        }
+
+        function applyPassiveIncome() {
+            const now = Date.now();
+            const elapsed = now - gameState.lastCoinTickAt;
+            const ticks = Math.floor(elapsed / COIN_TICK_INTERVAL);
+
+            if (ticks <= 0) {
+                return;
+            }
+
+            for (const player of gameState.players) {
+                player.coins += ticks * COIN_TICK_AMOUNT;
+            }
+            gameState.lastCoinTickAt += ticks * COIN_TICK_INTERVAL;
+        }
+
         // Update game state
         function update() {
-            // Increment turn count every 4 seconds
-            const now = Date.now();
-            if (now - gameState.lastTurnTime >= ACTION_COOLDOWN) {
-                gameState.turnCount++;
-                gameState.lastTurnTime = now;
+            updateReadyOverlay();
+            applyPassiveIncome();
+            if (!gameState.isMatchStarted) {
+                // Let both sides buy/place during preparation, but prevent movement/attacks.
+                aiUpdate();
+                return;
             }
 
             for (const piece of gameState.pieces) {
@@ -888,13 +1607,9 @@
                 const playerData = gameState.players[player - 1];
                 const cost = PIECE_DATA[pieceType].cost;
 
-                // Check cooldown
-                if (Date.now() - playerData.lastBuyTime < BUYING_COOLDOWN) {
-                    return;
-                }
-
                 // Check if player has enough coins
                 if (playerData.coins < cost) {
+                    setBuyFeedback(`Not enough coins for ${pieceType}. Need ${cost}.`, 'error');
                     return;
                 }
 
@@ -904,6 +1619,7 @@
                 
                 gameState.selectedPieceType = pieceType;
                 gameState.selectedPlayer = player;
+                setBuyFeedback(`Selected ${pieceType}. Click a valid tile to place.`, 'success');
             });
         });
 
@@ -917,16 +1633,33 @@
             // Check if position is valid for this player
             const validRows = player === 1 ? [6, 7] : [0, 1];
             if (!validRows.includes(row)) {
+                setBuyFeedback(`Invalid row. Player ${player} can place only on rows ${validRows.join(' and ')}.`, 'error');
                 return;
             }
 
             // Check if position is occupied
             if (gameState.board[row][col]) {
+                setBuyFeedback('That tile is occupied. Pick another tile.', 'error');
+                return;
+            }
+
+            // Check cooldown when placing to avoid click feels laggy.
+            const buyElapsed = Date.now() - playerData.lastBuyTime;
+            if (buyElapsed < BUYING_COOLDOWN) {
+                const wait = ((BUYING_COOLDOWN - buyElapsed) / 1000).toFixed(1);
+                setBuyFeedback(`Shop cooling down. Wait ${wait}s before placing next piece.`, 'error');
+                return;
+            }
+
+            // Check coins at place time as well.
+            if (playerData.coins < cost) {
+                setBuyFeedback(`Not enough coins. Need ${cost}.`, 'error');
                 return;
             }
 
             // Deduct coins
             playerData.coins -= cost;
+            playerData.lastBuyTime = Date.now();
 
             // Create and place piece
             const piece = new Piece(pieceType, player, row, col);
@@ -937,6 +1670,7 @@
             document.querySelectorAll('.pieceButton').forEach(b => b.classList.remove('selected'));
             gameState.selectedPieceType = null;
             gameState.selectedPlayer = null;
+            setBuyFeedback(`Placed ${pieceType} at (${row}, ${col}).`, 'success');
 
             updateUI();
         }
@@ -945,20 +1679,27 @@
         function updateUI() {
             document.getElementById('p1Coins').textContent = gameState.players[0].coins;
             document.getElementById('p2Coins').textContent = gameState.players[1].coins;
-            
-            // Update turn count
-            document.getElementById('turnCount').textContent = gameState.turnCount;
-            
-            // Calculate and display action cooldown
-            const timeSinceLastTurn = Date.now() - gameState.lastTurnTime;
-            const cooldownRemaining = Math.max(0, ACTION_COOLDOWN - timeSinceLastTurn);
+
+            // Pulse cooldown bar to show movement cadence in real time.
+            const cooldownRemaining = ACTION_COOLDOWN - (Date.now() % ACTION_COOLDOWN);
             const cooldownPercent = (cooldownRemaining / ACTION_COOLDOWN) * 100;
-            
+
             const cooldownBarFill = document.getElementById('cooldownBarFill');
             cooldownBarFill.style.width = cooldownPercent + '%';
-            
+
             const cooldownText = document.getElementById('cooldownText');
             cooldownText.textContent = (cooldownRemaining / 1000).toFixed(1) + 's';
+
+            const p1 = getTeamMetrics(1);
+            const p2 = getTeamMetrics(2);
+            const totalScore = p1.score + p2.score;
+            const p1Edge = totalScore > 0 ? ((p1.score / totalScore) * 100) : 50;
+
+            document.getElementById('balanceMeta').innerHTML =
+                `Passive income: +${COIN_TICK_AMOUNT}/sec | Buy cooldown: ${(BUYING_COOLDOWN / 1000).toFixed(1)}s | Prep: ${(READY_DURATION / 1000)}s<br>` +
+                `P1 HP ${p1.totalHP} | DPS ${p1.totalDps.toFixed(1)} | State S/E/D ${p1.seeking}/${p1.engaged}/${p1.defending} | Pressure ${p1.avgPressure.toFixed(1)}<br>` +
+                `P2 HP ${p2.totalHP} | DPS ${p2.totalDps.toFixed(1)} | State S/E/D ${p2.seeking}/${p2.engaged}/${p2.defending} | Pressure ${p2.avgPressure.toFixed(1)}<br>` +
+                `Live edge: P1 ${p1Edge.toFixed(0)}% vs P2 ${(100 - p1Edge).toFixed(0)}%`;
 
             // Update button states
             document.querySelectorAll('.pieceButton').forEach(button => {
@@ -980,6 +1721,8 @@
         }
 
         // Start game
+        document.getElementById('runAutoTestBtn').addEventListener('click', runAutoBalanceTest);
+        renderBalancePanel();
         initGame();
         gameLoop();
     </script>
