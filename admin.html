@@ -311,6 +311,25 @@
             return snapshot && typeof snapshot.size === 'number' ? snapshot.size : 0;
         }
 
+        async function safeCollectionGet(name) {
+            try {
+                const snapshot = await db.collection(name).get();
+                return { ok: true, name, snapshot, error: null };
+            } catch (error) {
+                return { ok: false, name, snapshot: null, error };
+            }
+        }
+
+        async function safeDocGet(collectionName, docId) {
+            const name = `${collectionName}/${docId}`;
+            try {
+                const snapshot = await db.collection(collectionName).doc(docId).get();
+                return { ok: true, name, snapshot, error: null };
+            } catch (error) {
+                return { ok: false, name, snapshot: null, error };
+            }
+        }
+
         function renderRows(targetId, rows, fallback = 'No data yet.') {
             const target = document.getElementById(targetId);
             target.innerHTML = '';
@@ -334,34 +353,52 @@
         async function loadDashboard() {
             setStatus('Loading admin metrics...');
 
-            try {
-                const [
-                    userCounterDoc,
-                    usersSnap,
-                    playsSnap,
-                    scoresSnap,
-                    inventorySnap,
-                    catalogSnap,
-                    purchasesSnap,
-                    progressSnap
-                ] = await Promise.all([
-                    db.collection('meta').doc('userCounter').get(),
-                    db.collection('users').get(),
-                    db.collection('gamePlays').get(),
-                    db.collection('scores').get(),
-                    db.collection('inventories').get(),
-                    db.collection('catalogItems').get(),
-                    db.collection('purchases').get(),
-                    db.collection('gameProgress').get()
-                ]);
+            const [
+                userCounterResult,
+                usersResult,
+                playsResult,
+                scoresResult,
+                inventoryResult,
+                catalogResult,
+                purchasesResult,
+                progressResult
+            ] = await Promise.all([
+                safeDocGet('meta', 'userCounter'),
+                safeCollectionGet('users'),
+                safeCollectionGet('gamePlays'),
+                safeCollectionGet('scores'),
+                safeCollectionGet('inventories'),
+                safeCollectionGet('catalogItems'),
+                safeCollectionGet('purchases'),
+                safeCollectionGet('gameProgress')
+            ]);
 
-                const userCounter = userCounterDoc.exists ? (userCounterDoc.data().value || 0) : 0;
-                const usersCount = getCountFromSnapshot(usersSnap);
-                const registeredUsers = Math.max(userCounter, usersCount);
+            const denied = [
+                userCounterResult,
+                usersResult,
+                playsResult,
+                scoresResult,
+                inventoryResult,
+                catalogResult,
+                purchasesResult,
+                progressResult
+            ].filter(r => !r.ok).map(r => r.name);
 
+            const usersSnap = usersResult.snapshot;
+            const playsSnap = playsResult.snapshot;
+            const scoresSnap = scoresResult.snapshot;
+
+            const userCounter = userCounterResult.ok && userCounterResult.snapshot.exists
+                ? (userCounterResult.snapshot.data().value || 0)
+                : 0;
+            const usersCount = usersResult.ok ? getCountFromSnapshot(usersSnap) : 0;
+            const registeredUsers = Math.max(userCounter, usersCount);
+
+            let activeUsers = 0;
+            if (usersResult.ok) {
                 const activeThreshold = new Date();
                 activeThreshold.setDate(activeThreshold.getDate() - 30);
-                const activeUsers = usersSnap.docs.filter(doc => {
+                activeUsers = usersSnap.docs.filter(doc => {
                     const data = doc.data() || {};
                     const lastLogin = data.lastLogin;
                     if (!lastLogin) {
@@ -370,20 +407,22 @@
                     const dt = lastLogin.toDate ? lastLogin.toDate() : new Date(lastLogin);
                     return dt >= activeThreshold;
                 }).length;
+            }
 
-                let totalPlays = 0;
-                const playRows = playsSnap.docs.map(doc => {
-                    const data = doc.data() || {};
-                    const count = data.count || 0;
-                    totalPlays += count;
-                    const gameId = doc.id;
-                    const gameName = gameNameMap[gameId] || gameId;
-                    return { gameId, gameName, count };
-                }).sort((a, b) => b.count - a.count);
+            let totalPlays = 0;
+            const playRows = playsResult.ok ? playsSnap.docs.map(doc => {
+                const data = doc.data() || {};
+                const count = data.count || 0;
+                totalPlays += count;
+                const gameId = doc.id;
+                const gameName = gameNameMap[gameId] || gameId;
+                return { gameId, gameName, count };
+            }).sort((a, b) => b.count - a.count) : [];
 
-                const scoresCount = getCountFromSnapshot(scoresSnap);
+            const scoresCount = scoresResult.ok ? getCountFromSnapshot(scoresSnap) : 0;
 
-                const groupedPlayers = new Map();
+            const groupedPlayers = new Map();
+            if (scoresResult.ok) {
                 scoresSnap.forEach(doc => {
                     const s = doc.data() || {};
                     const key = s.userId || s.email || doc.id;
@@ -400,73 +439,90 @@
                         row.games.add(s.gameId);
                     }
                 });
+            }
 
-                const topPlayers = Array.from(groupedPlayers.values())
-                    .sort((a, b) => b.total - a.total)
-                    .slice(0, 12);
+            const topPlayers = Array.from(groupedPlayers.values())
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 12);
 
-                const recentUsers = usersSnap.docs
-                    .map(doc => {
-                        const data = doc.data() || {};
-                        return {
-                            name: data.displayName || data.email || doc.id,
-                            registerNumber: data.registerNumber || '-',
-                            createdAt: data.createdAt || null
-                        };
-                    })
-                    .sort((a, b) => {
-                        const aTime = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
-                        const bTime = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
-                        return bTime - aTime;
-                    })
-                    .slice(0, 12);
+            const recentUsers = usersResult.ok ? usersSnap.docs
+                .map(doc => {
+                    const data = doc.data() || {};
+                    return {
+                        name: data.displayName || data.email || doc.id,
+                        registerNumber: data.registerNumber || '-',
+                        createdAt: data.createdAt || null
+                    };
+                })
+                .sort((a, b) => {
+                    const aTime = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+                    const bTime = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+                    return bTime - aTime;
+                })
+                .slice(0, 12)
+                : [];
 
-                document.getElementById('metricUsers').textContent = formatNumber(registeredUsers);
-                document.getElementById('metricActive').textContent = formatNumber(activeUsers);
-                document.getElementById('metricPlays').textContent = formatNumber(totalPlays);
-                document.getElementById('metricScores').textContent = formatNumber(scoresCount);
-                document.getElementById('metricGames').textContent = formatNumber(playRows.length);
-                document.getElementById('metricRefresh').textContent = new Date().toLocaleTimeString();
+            document.getElementById('metricUsers').textContent = usersResult.ok || userCounterResult.ok
+                ? formatNumber(registeredUsers)
+                : 'N/A';
+            document.getElementById('metricActive').textContent = usersResult.ok
+                ? formatNumber(activeUsers)
+                : 'N/A';
+            document.getElementById('metricPlays').textContent = playsResult.ok
+                ? formatNumber(totalPlays)
+                : 'N/A';
+            document.getElementById('metricScores').textContent = scoresResult.ok
+                ? formatNumber(scoresCount)
+                : 'N/A';
+            document.getElementById('metricGames').textContent = playsResult.ok
+                ? formatNumber(playRows.length)
+                : 'N/A';
+            document.getElementById('metricRefresh').textContent = new Date().toLocaleTimeString();
 
-                renderRows(
-                    'playsRows',
-                    playRows.map(row => `<td>${row.gameName}</td><td>${row.gameId}</td><td>${formatNumber(row.count)}</td>`),
-                    'No play data yet.'
-                );
+            renderRows(
+                'playsRows',
+                playRows.map(row => `<td>${row.gameName}</td><td>${row.gameId}</td><td>${formatNumber(row.count)}</td>`),
+                playsResult.ok ? 'No play data yet.' : 'No permission to read gamePlays.'
+            );
 
-                renderRows(
-                    'playersRows',
-                    topPlayers.map(player => `<td>${player.label}</td><td>${formatNumber(player.total)}</td><td>${player.games.size}</td>`),
-                    'No score records yet.'
-                );
+            renderRows(
+                'playersRows',
+                topPlayers.map(player => `<td>${player.label}</td><td>${formatNumber(player.total)}</td><td>${player.games.size}</td>`),
+                scoresResult.ok ? 'No score records yet.' : 'No permission to read scores.'
+            );
 
-                renderRows(
-                    'usersRows',
-                    recentUsers.map(user => `<td>${user.name}</td><td>${user.registerNumber}</td><td>${formatDateTime(user.createdAt)}</td>`),
-                    'No registered users yet.'
-                );
+            renderRows(
+                'usersRows',
+                recentUsers.map(user => `<td>${user.name}</td><td>${user.registerNumber}</td><td>${formatDateTime(user.createdAt)}</td>`),
+                usersResult.ok ? 'No registered users yet.' : 'No permission to read users.'
+            );
 
-                const futureCollections = [
-                    { name: 'inventories', count: getCountFromSnapshot(inventorySnap) },
-                    { name: 'catalogItems', count: getCountFromSnapshot(catalogSnap) },
-                    { name: 'purchases', count: getCountFromSnapshot(purchasesSnap) },
-                    { name: 'gameProgress', count: getCountFromSnapshot(progressSnap) }
-                ];
+            const futureCollections = [
+                { name: 'inventories', result: inventoryResult },
+                { name: 'catalogItems', result: catalogResult },
+                { name: 'purchases', result: purchasesResult },
+                { name: 'gameProgress', result: progressResult }
+            ];
 
-                renderRows(
-                    'futureRows',
-                    futureCollections.map(entry => {
-                        const status = entry.count > 0 ? 'Live' : 'Empty (ready for future)';
-                        return `<td>${entry.name}</td><td>${formatNumber(entry.count)}</td><td>${status}</td>`;
-                    }),
-                    'No collection data yet.'
-                );
+            renderRows(
+                'futureRows',
+                futureCollections.map(entry => {
+                    if (!entry.result.ok) {
+                        return `<td>${entry.name}</td><td>N/A</td><td>Permission blocked</td>`;
+                    }
+                    const count = getCountFromSnapshot(entry.result.snapshot);
+                    const status = count > 0 ? 'Live' : 'Empty (ready for future)';
+                    return `<td>${entry.name}</td><td>${formatNumber(count)}</td><td>${status}</td>`;
+                }),
+                'No collection data yet.'
+            );
 
-                document.getElementById('dashboard').style.display = 'grid';
+            document.getElementById('dashboard').style.display = 'grid';
+
+            if (denied.length) {
+                setStatus(`Loaded with limited permissions. Blocked: ${denied.join(', ')}`, true);
+            } else {
                 setStatus('Admin metrics loaded.');
-            } catch (error) {
-                console.error('Admin dashboard load error:', error);
-                setStatus(`Unable to load admin metrics: ${error.message}`, true);
             }
         }
 
