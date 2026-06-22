@@ -503,6 +503,84 @@
             shakeY: 0
         };
 
+        const engineSound = new Audio('sfx/car1.mp3');
+        engineSound.loop = true;
+        engineSound.volume = 0.35;
+        engineSound.preload = 'auto';
+
+        const chargingSound = new Audio('sfx/charging01.mp3');
+        chargingSound.loop = true;
+        chargingSound.volume = 0.4;
+        chargingSound.preload = 'auto';
+
+        let soundUnlocked = false;
+        let previousVehicleX = {
+            p1: player1.x,
+            p2: player2.x
+        };
+
+        function unlockSounds() {
+            if (soundUnlocked) return;
+            engineSound.play().then(() => {
+                engineSound.pause();
+                engineSound.currentTime = 0;
+                chargingSound.play().then(() => {
+                    chargingSound.pause();
+                    chargingSound.currentTime = 0;
+                }).catch(() => {});
+                soundUnlocked = true;
+            }).catch(() => {
+                // Browser may require another user interaction.
+            });
+        }
+
+        function setEngineSoundMoving(isMoving) {
+            if (!soundUnlocked || !game.isRunning || game.endSlowMo) {
+                if (!engineSound.paused) {
+                    engineSound.pause();
+                }
+                return;
+            }
+
+            if (isMoving) {
+                if (engineSound.paused) {
+                    engineSound.play().catch(() => {});
+                }
+            } else if (!engineSound.paused) {
+                engineSound.pause();
+            }
+        }
+
+        function updateEngineSound() {
+            const p1Moved = Math.abs(player1.x - previousVehicleX.p1) > 0.08;
+            const p2Moved = Math.abs(player2.x - previousVehicleX.p2) > 0.08;
+            setEngineSoundMoving(p1Moved || p2Moved);
+            previousVehicleX.p1 = player1.x;
+            previousVehicleX.p2 = player2.x;
+        }
+
+        function setChargingSoundActive(active) {
+            if (!soundUnlocked || !game.isRunning || game.endSlowMo) {
+                if (!chargingSound.paused) {
+                    chargingSound.pause();
+                }
+                return;
+            }
+
+            if (active) {
+                if (chargingSound.paused) {
+                    chargingSound.play().catch(() => {});
+                }
+            } else if (!chargingSound.paused) {
+                chargingSound.pause();
+            }
+        }
+
+        function updateChargingSound() {
+            const isAnyPlayerCharging = (player1.charging || player2.charging) && !projectile;
+            setChargingSoundActive(isAnyPlayerCharging);
+        }
+
         // Terrain
         const terrain = [];
         const terrainSegments = 60;
@@ -540,11 +618,34 @@
             }
         };
 
-        const terrainScaleX = WORLD_WIDTH / MAP01.ground.width;
-        const terrainScaleY = WORLD_HEIGHT / MAP01.ground.height;
+        const TILE_RULE_MAP = {
+            rows: 14,
+            cols: 48,
+            baseRow: 8.5,
+            roughness: 0.85,
+            waveA: { amplitude: 1.6, frequency: 1.0, phase: 0.35 },
+            waveB: { amplitude: 0.9, frequency: 2.15, phase: 1.1 },
+            seed: 23,
+            platforms: [
+                { startCol: 6, endCol: 11, row: 5.2, thicknessRows: 0.7 },
+                { startCol: 27, endCol: 33, row: 2.3, thicknessRows: 0.8 }
+            ],
+            waterLevel: 640
+        };
 
-        const waterScale = WORLD_WIDTH / MAP01.water.width;
-        const waterHeight = MAP01.water.height * waterScale;
+        // Switch between 'svg' and 'tile' for fast map iteration.
+        const ACTIVE_MAP_MODE = 'svg';
+
+        const uniformTerrainScale = Math.min(
+            WORLD_WIDTH / MAP01.ground.width,
+            WORLD_HEIGHT / MAP01.ground.height
+        );
+        const terrainScaleX = uniformTerrainScale;
+        const terrainScaleY = uniformTerrainScale;
+        const mapOffsetX = (WORLD_WIDTH - MAP01.ground.width * uniformTerrainScale) / 2;
+        const mapOffsetY = WORLD_HEIGHT - MAP01.ground.height * uniformTerrainScale;
+
+        const waterHeight = MAP01.water.height * uniformTerrainScale;
 
         // Projectile
         let projectile = null;
@@ -553,7 +654,7 @@
         let craters = [];
 
         // Water level
-        const WATER_LEVEL = Math.round(WORLD_HEIGHT - waterHeight);
+        let WATER_LEVEL = Math.round(WORLD_HEIGHT - waterHeight);
 
         const mapPathObjects = MAP01.ground.paths.map(path => ({
             ...path,
@@ -564,6 +665,72 @@
             fill: MAP01.ground.paths[0].fill,
             stroke: MAP01.ground.paths[0].stroke
         };
+
+        function buildTileTerrainFromRules(rules) {
+            const cols = rules.cols || 48;
+            const rows = rules.rows || 14;
+            const tileWidth = WORLD_WIDTH / cols;
+            const tileHeight = WORLD_HEIGHT / rows;
+
+            const heights = new Array(WORLD_WIDTH + 1).fill(WORLD_HEIGHT);
+            const colRows = [];
+
+            for (let c = 0; c < cols; c++) {
+                const t = c / cols;
+                const n = Math.sin((c + 1) * 12.9898 + (rules.seed || 7) * 78.233) * 43758.5453;
+                const noise = (n - Math.floor(n)) * 2 - 1;
+
+                let row = rules.baseRow || 8.5;
+                const wA = rules.waveA || { amplitude: 1.5, frequency: 1, phase: 0 };
+                const wB = rules.waveB || { amplitude: 1.0, frequency: 2.2, phase: 0.8 };
+
+                row += Math.sin(t * Math.PI * 2 * wA.frequency + wA.phase) * wA.amplitude;
+                row += Math.sin(t * Math.PI * 2 * wB.frequency + wB.phase) * wB.amplitude;
+                row += noise * (rules.roughness || 0.7);
+                row = Math.max(3, Math.min(rows - 2, row));
+
+                colRows.push(row);
+            }
+
+            for (let c = 0; c < cols; c++) {
+                const y = colRows[c] * tileHeight;
+                const start = Math.floor(c * tileWidth);
+                const end = Math.min(WORLD_WIDTH, Math.ceil((c + 1) * tileWidth));
+                for (let x = start; x <= end; x++) {
+                    heights[x] = y;
+                }
+            }
+
+            return heights;
+        }
+
+        function createTilePlatformBands(rules) {
+            const cols = rules.cols || 48;
+            const rows = rules.rows || 14;
+            const tileWidth = WORLD_WIDTH / cols;
+            const tileHeight = WORLD_HEIGHT / rows;
+
+            const top = new Array(WORLD_WIDTH + 1).fill(null);
+            const bottom = new Array(WORLD_WIDTH + 1).fill(null);
+
+            (rules.platforms || []).forEach(platform => {
+                const start = Math.max(0, Math.floor(platform.startCol * tileWidth));
+                const end = Math.min(WORLD_WIDTH, Math.ceil((platform.endCol + 1) * tileWidth));
+                const topY = platform.row * tileHeight;
+                const bottomY = topY + (platform.thicknessRows || 0.8) * tileHeight;
+                for (let x = start; x <= end; x++) {
+                    top[x] = topY;
+                    bottom[x] = bottomY;
+                }
+            });
+
+            return [{
+                role: 'platform',
+                fill: groundStyle.fill,
+                stroke: groundStyle.stroke,
+                bands: { top, bottom }
+            }];
+        }
 
         // Initialize terrain
         function buildTerrainFromSvgPath(pathData, fillGaps = true) {
@@ -579,8 +746,8 @@
 
             for (let i = 0; i <= sampleCount; i++) {
                 const point = path.getPointAtLength((totalLength * i) / sampleCount);
-                const x = point.x * terrainScaleX;
-                const y = point.y * terrainScaleY;
+                const x = point.x * terrainScaleX + mapOffsetX;
+                const y = point.y * terrainScaleY + mapOffsetY;
                 const xi = Math.round(x);
                 if (xi < 0 || xi > WORLD_WIDTH) {
                     continue;
@@ -624,8 +791,8 @@
             let prev = null;
             for (let i = 0; i <= sampleCount; i++) {
                 const point = path.getPointAtLength((totalLength * i) / sampleCount);
-                const x = point.x * terrainScaleX;
-                const y = point.y * terrainScaleY;
+                const x = point.x * terrainScaleX + mapOffsetX;
+                const y = point.y * terrainScaleY + mapOffsetY;
                 const xi = Math.round(x);
                 if (xi < 0 || xi > WORLD_WIDTH) {
                     prev = { x, y };
@@ -704,13 +871,28 @@
 
         function initTerrain() {
             terrain.length = 0;
-            const groundPath = MAP01.ground.paths.find(path => path.role === 'ground');
-            if (groundPath) {
-                const groundHeights = buildTerrainFromSvgPath(groundPath.d, true);
-                terrain.push(...groundHeights.map((y, x) => ({
-                    x,
-                    y: y === null ? WORLD_HEIGHT : y
-                })));
+            if (ACTIVE_MAP_MODE === 'tile') {
+                const tileHeights = buildTileTerrainFromRules(TILE_RULE_MAP);
+                terrain.push(...tileHeights.map((y, x) => ({ x, y })));
+                WATER_LEVEL = TILE_RULE_MAP.waterLevel || WATER_LEVEL;
+                platformBands = createTilePlatformBands(TILE_RULE_MAP);
+            } else {
+                const groundPath = MAP01.ground.paths.find(path => path.role === 'ground');
+                if (groundPath) {
+                    const groundHeights = buildTerrainFromSvgPath(groundPath.d, true);
+                    terrain.push(...groundHeights.map((y, x) => ({
+                        x,
+                        y: y === null ? WORLD_HEIGHT : y
+                    })));
+                }
+
+                WATER_LEVEL = Math.round(WORLD_HEIGHT - waterHeight);
+                platformBands = mapPathObjects
+                    .filter(path => path.role === 'platform')
+                    .map(path => ({
+                        ...path,
+                        bands: buildPlatformBands(path.d)
+                    }));
             }
 
             setSpawnPositions();
@@ -765,8 +947,8 @@
             let prev = null;
             for (let i = 0; i <= sampleCount; i++) {
                 const point = path.getPointAtLength((totalLength * i) / sampleCount);
-                const x = point.x * terrainScaleX;
-                const y = point.y * terrainScaleY;
+                const x = point.x * terrainScaleX + mapOffsetX;
+                const y = point.y * terrainScaleY + mapOffsetY;
                 const xi = Math.round(x);
                 if (xi < 0 || xi > WORLD_WIDTH) {
                     prev = { x, y };
@@ -802,12 +984,7 @@
             return { top, bottom };
         }
 
-        const platformBands = mapPathObjects
-            .filter(path => path.role === 'platform')
-            .map(path => ({
-                ...path,
-                bands: buildPlatformBands(path.d)
-            }));
+        let platformBands = [];
 
         function isPointInPlatform(x, y) {
             const xi = Math.round(x);
@@ -872,6 +1049,9 @@
             game.isRunning = true;
             game.turnTimeLeft = game.maxTurnTime;
             game.cameraSnap = true;
+            previousVehicleX.p1 = player1.x;
+            previousVehicleX.p2 = player2.x;
+            unlockSounds();
             updateTurnTimer();
             updateTurnIndicator();
             setNewWind();
@@ -913,12 +1093,14 @@
                 const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
                 if (currentPlayerObj.charging && currentPlayerObj.power > 0) {
                     fire(currentPlayerObj);
-                    currentPlayerObj.charging = false;
                 }
+                currentPlayerObj.charging = false;
+                setChargingSoundActive(false);
             }
         });
 
         function fire(player) {
+            setChargingSoundActive(false);
             // Barrel uses player.angle in rotated canvas
             // World angle = player.angle + player.groundAngle (shown in display)
             // But for projectile physics, convert the displayed world angle back
@@ -1414,7 +1596,11 @@
         }
 
         function update() {
-            if (!game.isRunning) return;
+            if (!game.isRunning) {
+                setEngineSoundMoving(false);
+                setChargingSoundActive(false);
+                return;
+            }
 
             const dt = game.timeScale;
 
@@ -1425,6 +1611,8 @@
                 if (game.endTimer <= 0) {
                     game.isRunning = false;
                     game.timeScale = 1;
+                    setEngineSoundMoving(false);
+                    setChargingSoundActive(false);
                     document.getElementById('winnerText').textContent = `PLAYER ${game.winner} WINS!`;
                     document.getElementById('gameOverScreen').style.display = 'flex';
                     return;
@@ -1518,6 +1706,8 @@
             
             updateProjectile(dt);
             updateExplosions(dt);
+            updateEngineSound();
+            updateChargingSound();
         }
         
         function updateShake() {
@@ -1622,11 +1812,13 @@
 
         function drawWater() {
             // Water body
-            ctx.fillStyle = MAP01.water.fill;
+            const waterFill = ACTIVE_MAP_MODE === 'tile' ? '#6B9EA2' : MAP01.water.fill;
+            const waterStroke = ACTIVE_MAP_MODE === 'tile' ? '#5AC4BF' : MAP01.water.stroke;
+            ctx.fillStyle = waterFill;
             ctx.fillRect(0, WATER_LEVEL, WORLD_WIDTH, WORLD_HEIGHT - WATER_LEVEL);
 
             // Wave animation
-            ctx.strokeStyle = MAP01.water.stroke;
+            ctx.strokeStyle = waterStroke;
             ctx.lineWidth = 2;
             ctx.beginPath();
             for (let x = 0; x <= WORLD_WIDTH; x += 15) {
@@ -1637,7 +1829,7 @@
             ctx.stroke();
 
             // Water surface line
-            ctx.strokeStyle = MAP01.water.stroke;
+            ctx.strokeStyle = waterStroke;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, WATER_LEVEL);

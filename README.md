@@ -2,11 +2,6 @@
 
 This workspace contains multiple web games. As the project grows, this file helps you quickly find key functions, systems, and files to tweak.
 
-## Product Direction
-- [docs/site-architecture.md](docs/site-architecture.md) - Recommended structure for the game hub, player accounts, score storage, inventory, and shop features.
-- [dev-log/2026-06-21-foundation.md](dev-log/2026-06-21-foundation.md) - Initial dev log entry capturing the current architecture and next build steps.
-- [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) - GitHub Pages deployment on push to `main`.
-
 ## Structure
 - [index.html](index.html) – Main game hub (Firebase auth, play counts, global scores API)
 - [01 - So many of them/SMOTgame.html](01%20-%20So%20many%20of%20them/SMOTgame.html) – SMOT game
@@ -48,15 +43,6 @@ This workspace contains multiple web games. As the project grows, this file help
 ## Notes
 - Scores and authentication use Firebase (configured in [index.html](index.html)).
 - Each game can call the global API via `window.parent.GameScores` (if launched from the hub) or `window.GameScores` if embedded.
-
-## Recommended Firebase Collections
-- `users` - profile, display name, role, createdAt, lastSeenAt
-- `gamePlays` - total play count per game
-- `scores` - current best score per user per game
-- `inventories` - owned items and currencies per user
-- `catalogItems` - shop item definitions, prices, rarity, availability
-- `purchases` - purchase history and transaction snapshots
-- `gameProgress` - per-user progression, unlocks, save-state metadata
 
 ## Next Additions (Suggested Sections)
 - Characters: stats, abilities, sprites

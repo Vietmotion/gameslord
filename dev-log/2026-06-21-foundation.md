@@ -35,3 +35,29 @@ Treat playplay.vn as one platform with many games, not a loose folder of unrelat
 
 ## Notes
 - Keep the current live files working while migrating. Do not break existing direct links to game pages during the folder cleanup.
+
+## Update - Evening Session
+
+### Platform and operations
+- Added owner-only admin console page (`admin.html`) with Firebase-backed metrics.
+- Added admin entry button on hub for `viet.motiondesign@gmail.com`.
+- Improved admin loading to handle partial Firestore permission failures instead of failing completely.
+
+### Chess War iteration
+- Added top menu/header and home navigation consistency.
+- Removed turn-gated movement and moved to continuous piece updates.
+- Added pre-fight preparation countdown and engagement lock behavior.
+- Added in-fight behavior states (`seeking`, `engaged`, `defending`) and anti-oscillation movement rules.
+- Added on-screen balance monitor and AI auto-test runner for fast balancing checks.
+
+### Gun Rider iteration
+- Added vehicle movement sound effect (`sfx/car1.mp3`) while moving.
+- Added charging sound effect (`sfx/charging01.mp3`) while holding fire charge.
+- Updated terrain sampling to use uniform scale with offset to reduce map stretching.
+- Added first rule-based tile map terrain generation path behind mode switch (`ACTIVE_MAP_MODE`).
+
+### Follow-up for next session
+1. Finalize Firestore security rules for admin dashboard full access.
+2. Move map/tile presets into external files (JSON) for easier authoring.
+3. Add optional per-map metadata (spawn ranges, wind profile, water settings).
+4. Continue SFX pass for shooting, impact, and UI feedback.
