@@ -123,27 +123,43 @@
         }
 
         .startContent {
-            text-align: center;
             color: white;
-            padding: 40px;
+            width: min(920px, 94%);
+            padding: 30px;
+            border-radius: 18px;
+            border: 1px solid rgba(78, 205, 196, 0.2);
+            background: linear-gradient(180deg, rgba(9, 13, 30, 0.88) 0%, rgba(6, 9, 22, 0.78) 100%);
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45), inset 0 0 30px rgba(78, 205, 196, 0.08);
         }
 
         .startContent h1 {
             font-size: 72px;
-            margin-bottom: 20px;
+            line-height: 1;
+            margin-bottom: 12px;
             background: linear-gradient(135deg, #4ecdc4 0%, #44a8d8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             font-weight: 700;
+            text-align: center;
         }
 
-        .startContent p {
-            font-size: 18px;
-            margin-bottom: 15px;
+        .startSubtitle {
+            font-size: 27px;
+            text-align: center;
+            margin-bottom: 18px;
+            color: rgba(255, 255, 255, 0.92);
+            font-weight: 600;
+            letter-spacing: 0.4px;
+        }
+
+        .lobbyFlow {
+            font-size: 15px;
+            text-align: center;
+            margin-bottom: 20px;
             color: rgba(255, 255, 255, 0.8);
-            font-weight: 300;
-            line-height: 1.6;
+            line-height: 1.5;
+            letter-spacing: 0.3px;
         }
 
         .startContent button {
@@ -162,8 +178,54 @@
             margin-top: 20px;
         }
 
+        .lobbyLayout {
+            display: grid;
+            grid-template-columns: 230px 1fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        .lobbyCard {
+            border-radius: 12px;
+            border: 1px solid rgba(78, 205, 196, 0.25);
+            background: rgba(20, 28, 52, 0.45);
+            padding: 14px;
+        }
+
+        .lobbyCard h2 {
+            font-size: 15px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            color: #8ee9df;
+        }
+
+        .lobbyCard p {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .startFooter {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 14px;
+            gap: 8px;
+        }
+
+        .startPrimary {
+            min-width: 260px;
+        }
+
+        .startNote {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.65);
+            letter-spacing: 0.3px;
+        }
+
         .onlinePanel {
-            margin-top: 22px;
             padding: 18px;
             border-radius: 12px;
             border: 1px solid rgba(78, 205, 196, 0.35);
@@ -231,8 +293,30 @@
         }
 
         #onlineAuthState {
-            min-width: 160px;
+            min-width: 170px;
             text-align: center;
+        }
+
+        @media (max-width: 900px) {
+            .startContent {
+                padding: 20px;
+            }
+
+            .startContent h1 {
+                font-size: 52px;
+            }
+
+            .startSubtitle {
+                font-size: 22px;
+            }
+
+            .lobbyLayout {
+                grid-template-columns: 1fr;
+            }
+
+            .startPrimary {
+                min-width: 220px;
+            }
         }
 
         .startContent button:hover {
@@ -378,33 +462,40 @@
         <div id="startScreen">
             <div class="startContent">
                 <h1>🎯 GUN RIDER</h1>
-                <p>Turn-based artillery battle against AI!</p>
-                <p>🎮 Use ←→ Arrow Keys to move</p>
-                <p>🎯 Use ↑↓ Arrow Keys to adjust angle</p>
-                <p>⚡ Hold SPACEBAR to charge power</p>
-                <p id="modeHint">🤖 Player 2 is controlled by AI</p>
-                <p>💥 Destroy your opponent!</p>
-                <div class="onlinePanel" aria-label="Online multiplayer controls">
-                    <div class="onlineActions">
-                        <button id="readyToggleButton" type="button" onclick="toggleOnlineReady()">Set Ready</button>
-                        <button type="button" onclick="createOnlineRoom()">Create Room</button>
-                        <button type="button" onclick="leaveOnlineRoom()">Leave Room</button>
+                <div class="startSubtitle">Turn-based artillery battle</div>
+                <div class="lobbyFlow">Create room -> Invite friend -> Both ready -> Host starts match</div>
+                <div class="lobbyLayout">
+                    <div class="lobbyCard">
+                        <h2>Battle Setup</h2>
+                        <p>Use online room mode to play against a real opponent.</p>
+                        <p id="modeHint">🤖 Player 2 is controlled by AI</p>
+                        <p>Switch to online mode by creating or joining a room.</p>
                     </div>
-                    <div class="onlineInline">
-                        <input id="roomCodeInput" type="text" maxlength="6" placeholder="ROOM CODE" />
-                        <button type="button" onclick="joinOnlineRoom()">Join Room</button>
-                        <button type="button" onclick="copyRoomCode()">Copy Invite</button>
+                    <div class="onlinePanel" aria-label="Online multiplayer controls">
+                        <div class="onlineActions">
+                            <button id="readyToggleButton" type="button" onclick="toggleOnlineReady()">Set Ready</button>
+                            <button type="button" onclick="createOnlineRoom()">Create Room</button>
+                            <button type="button" onclick="leaveOnlineRoom()">Leave Room</button>
+                        </div>
+                        <div class="onlineInline">
+                            <input id="roomCodeInput" type="text" maxlength="6" placeholder="ROOM CODE" />
+                            <button type="button" onclick="joinOnlineRoom()">Join Room</button>
+                            <button type="button" onclick="copyRoomCode()">Copy Invite</button>
+                        </div>
+                        <div class="onlineAuth">
+                            <button type="button" onclick="loginOnline()">Sign In with Google</button>
+                            <button type="button" onclick="logoutOnline()">Sign Out</button>
+                            <div id="onlineAuthState" class="onlineMeta">Auth: checking...</div>
+                        </div>
+                        <div id="readyMeta" class="onlineMeta">Ready: Host No • Guest No</div>
+                        <div id="roomMeta" class="onlineMeta">No room connected.</div>
+                        <div id="onlineStatus" class="onlineStatus"></div>
                     </div>
-                    <div class="onlineAuth">
-                        <button type="button" onclick="loginOnline()">Sign In with Google</button>
-                        <button type="button" onclick="logoutOnline()">Sign Out</button>
-                        <div id="onlineAuthState" class="onlineMeta">Auth: checking...</div>
-                    </div>
-                    <div id="readyMeta" class="onlineMeta">Ready: Host No • Guest No</div>
-                    <div id="roomMeta" class="onlineMeta">No room connected.</div>
-                    <div id="onlineStatus" class="onlineStatus"></div>
                 </div>
-                <button onclick="startGame()">START GAME</button>
+                <div class="startFooter">
+                    <button class="startPrimary" onclick="startGame()">START GAME</button>
+                    <div class="startNote">No room? Start instantly vs AI.</div>
+                </div>
             </div>
         </div>
         <div id="gameOverScreen">
@@ -560,7 +651,6 @@
                 setOnlineStatus('Auth service is unavailable. Reload and try again.', true);
                 return;
             }
-
             if (typeof firebase === 'undefined' || !firebase.auth || !firebase.auth.GoogleAuthProvider) {
                 setOnlineStatus('Google auth is unavailable. Reload and try again.', true);
                 return;
@@ -629,13 +719,11 @@
         function updateReadyToggleButton() {
             const button = document.getElementById('readyToggleButton');
             if (!button) return;
-
             if (!online.active || !online.roomRef) {
                 button.textContent = 'Set Ready';
                 button.disabled = true;
                 return;
             }
-
             button.disabled = false;
             const localReady = online.localSeat === 1 ? online.hostReady : online.guestReady;
             button.textContent = localReady ? 'Unready' : 'Set Ready';
@@ -716,7 +804,7 @@
                             unsubscribe();
                         }
                     } catch (error) {
-                        // No-op: best-effort cleanup.
+                        // No-op.
                     }
                     resolve(auth.currentUser || null);
                 }, timeoutMs);
@@ -753,15 +841,11 @@
 
             const user = await waitForAuthUser();
             if (!user) {
-                setOnlineStatus('No active login found here. Open from Home after login and retry.', true);
+                setOnlineStatus('Please sign in with Google before creating or joining a room.', true);
                 return false;
             }
 
             online.localUid = user.uid;
-
-            if (!online.localUid) {
-                online.localUid = getLocalUid();
-            }
             return true;
         }
 

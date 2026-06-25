@@ -21,11 +21,19 @@ service cloud.firestore {
         && request.resource.data.guestUid == null
         && request.resource.data.status == 'waiting';
 
-      // Room updates for host/guest only.
-      allow update: if request.auth != null
-        && resource.data.hostUid in [request.auth.uid, null]
-        || request.auth != null
-        && resource.data.guestUid == request.auth.uid;
+      // Room updates:
+      // - host can update
+      // - existing guest can update
+      // - new guest can claim empty guest seat
+      allow update: if request.auth != null && (
+        resource.data.hostUid == request.auth.uid
+        || resource.data.guestUid == request.auth.uid
+        || (
+          resource.data.guestUid == null
+          && request.resource.data.guestUid == request.auth.uid
+          && request.resource.data.hostUid == resource.data.hostUid
+        )
+      );
 
       // Optional: only host can delete room.
       allow delete: if request.auth != null
