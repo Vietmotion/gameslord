@@ -1574,7 +1574,7 @@
             } catch (error) {
                 console.error('Create room failed:', error);
                 if (error && error.code === 'permission-denied') {
-                    setOnlineStatus('Room creation denied by Firestore rules for this account.', true);
+                    setOnlineStatus('Room creation denied by Firestore rules. Publish the updated Gun Rider multiplayer rules first.', true);
                     return;
                 }
                 setOnlineStatus('Could not create room.', true);
@@ -1707,7 +1707,7 @@
                     return;
                 }
                 if (error && error.code === 'permission-denied') {
-                    setOnlineStatus('Room join denied by Firestore rules for this account.', true);
+                    setOnlineStatus('Room join denied by Firestore rules. Current rules likely still allow only host + one guest.', true);
                     return;
                 }
                 setOnlineStatus('Could not join room.', true);
