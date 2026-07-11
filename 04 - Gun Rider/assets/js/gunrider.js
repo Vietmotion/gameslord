@@ -1,11 +1,13 @@
 ﻿const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+    const ultimateButton = document.getElementById('ultimateButton');
         canvas.width = 1200;
         canvas.height = 700;
         const VIEW_WIDTH = canvas.width;
         const VIEW_HEIGHT = canvas.height;
         const WORLD_WIDTH = 2400;
         const WORLD_HEIGHT = 700;
+        const CAMERA_TOP_OVERSCAN = 220;
 
         // Game state
         const game = {
@@ -31,6 +33,7 @@
             turnTimeLeft: 12,
             cameraSnap: true,
             cameraHoldX: null,
+            cameraHoldY: null,
             prematchScan: {
                 active: false,
                 startedAt: 0,
@@ -97,6 +100,15 @@
         };
 
         const CHARGE_RATE_PER_TICK = 0.9;
+        const ENERGY_REGEN_PER_TICK = 0.02;
+        const ENERGY_GAIN_ON_HIT = 16;
+        const ENERGY_GAIN_ON_HIT_TAKEN = 6;
+        const ULTIMATE_SLOW_MO_SCALE = 0.5;
+        const CATRKET_ULTIMATE_PROFILE = Object.freeze({
+            projectileSizeMultiplier: 2,
+            blastPowerMultiplier: 1.5,
+            damageMultiplier: 1.5
+        });
         const SURFACE_SNAP_GRACE = 12;
         const DEATH_FADE_DURATION_MS = 700;
 
@@ -126,7 +138,8 @@
         };
 
         const camera = {
-            x: 0
+            x: 0,
+            y: 0
         };
 
         const online = {
@@ -157,6 +170,8 @@
                 playerStates: {}
             },
             settings: null,
+            activeMatchId: null,
+            authoritativeMatch: null,
             lastLiveSyncAt: 0,
             lastLiveSignature: '',
             lastAppliedLiveTs: 0,
@@ -231,6 +246,10 @@
             return Boolean(online.active && online.combat && online.combat.active);
         }
 
+        function shouldUseSeatLiveSync() {
+            return (online.participants || []).length <= 2;
+        }
+
         function getSpawnXForSlot(slot, settings = online.settings) {
             const cfg = settings || getSpawnSettings();
             const leftBase = Number.isFinite(cfg.p1x) ? cfg.p1x : 220;
@@ -244,9 +263,9 @@
             return Math.max(80, Math.min(WORLD_WIDTH - 80, base + offset));
         }
 
-        function buildParticipantState(participant) {
+        function buildParticipantState(participant, settings = online.settings) {
             const side = normalizeTeamSide(participant.side, sideFromSlot(participant.slot));
-            const x = getSpawnXForSlot(participant.slot);
+            const x = getSpawnXForSlot(participant.slot, settings);
             const surface = getSurfaceBelowY(x, 0);
             return {
                 uid: participant.uid,
@@ -264,6 +283,9 @@
                 maxHealth: 100,
                 fuel: 300,
                 maxFuel: 300,
+                energy: 0,
+                maxEnergy: 100,
+                ultimateQueued: false,
                 charging: false,
                 groundAngle: surface.slope,
                 shake: 0,
@@ -272,6 +294,118 @@
                 alive: true,
                 deadFadeUntilMs: 0
             };
+        }
+
+        function buildAuthoritativeMatchPayload(matchId, roster, settings) {
+            const sortedRoster = [...(roster || [])].sort((a, b) => Number(a.slot) - Number(b.slot));
+            const turnOrder = sortedRoster.map((participant) => participant.uid);
+            const playerStates = {};
+
+            sortedRoster.forEach((participant) => {
+                const state = buildParticipantState(participant, settings);
+                playerStates[participant.uid] = {
+                    uid: state.uid,
+                    slot: state.slot,
+                    side: state.side,
+                    name: state.name,
+                    x: state.x,
+                    y: state.y,
+                    vx: state.vx,
+                    vy: state.vy,
+                    angle: state.angle,
+                    aimFacing: state.aimFacing,
+                    power: state.power,
+                    health: state.health,
+                    maxHealth: state.maxHealth,
+                    fuel: state.fuel,
+                    maxFuel: state.maxFuel,
+                    energy: state.energy,
+                    maxEnergy: state.maxEnergy,
+                    ultimateQueued: state.ultimateQueued,
+                    charging: state.charging,
+                    groundAngle: state.groundAngle,
+                    shake: state.shake,
+                    shakeX: state.shakeX,
+                    shakeY: state.shakeY,
+                    alive: state.alive,
+                    deadFadeUntilMs: state.deadFadeUntilMs
+                };
+            });
+
+            return {
+                id: matchId,
+                version: 1,
+                createdAtMs: Date.now(),
+                turnOrder,
+                currentTurnUid: turnOrder[0] || null,
+                playerStates
+            };
+        }
+
+        function hydrateOnlineCombatFromMatch(matchPayload) {
+            if (!matchPayload || typeof matchPayload !== 'object') {
+                return false;
+            }
+            const rawStates = matchPayload.playerStates;
+            if (!rawStates || typeof rawStates !== 'object') {
+                return false;
+            }
+
+            const requestedOrder = Array.isArray(matchPayload.turnOrder) ? matchPayload.turnOrder : [];
+            const turnOrder = requestedOrder.filter((uid) => Boolean(uid && rawStates[uid]));
+            if (turnOrder.length < 2) {
+                return false;
+            }
+
+            resetOnlineCombatState();
+            online.combat.active = true;
+            online.combat.turnOrder = turnOrder;
+            online.combat.currentTurnUid = turnOrder.includes(matchPayload.currentTurnUid)
+                ? matchPayload.currentTurnUid
+                : turnOrder[0];
+
+            turnOrder.forEach((uid) => {
+                const source = rawStates[uid] || {};
+                const fallbackSlot = Number(source.slot) || 1;
+                const participant = getParticipantByUid(uid) || {
+                    uid,
+                    slot: fallbackSlot,
+                    side: normalizeTeamSide(source.side, sideFromSlot(fallbackSlot)),
+                    name: source.name || getSlotLabel(fallbackSlot)
+                };
+                const base = buildParticipantState(participant, online.settings);
+
+                online.combat.playerStates[uid] = {
+                    ...base,
+                    uid,
+                    slot: Number(source.slot) || base.slot,
+                    side: normalizeTeamSide(source.side, base.side),
+                    name: String(source.name || base.name || '').trim() || getSlotLabel(Number(source.slot) || base.slot),
+                    x: Number.isFinite(source.x) ? source.x : base.x,
+                    y: Number.isFinite(source.y) ? source.y : base.y,
+                    vx: Number.isFinite(source.vx) ? source.vx : base.vx,
+                    vy: Number.isFinite(source.vy) ? source.vy : base.vy,
+                    angle: Number.isFinite(source.angle) ? source.angle : base.angle,
+                    aimFacing: Number.isFinite(source.aimFacing) ? (source.aimFacing >= 0 ? 1 : -1) : base.aimFacing,
+                    power: Number.isFinite(source.power) ? source.power : base.power,
+                    health: Number.isFinite(source.health) ? source.health : base.health,
+                    maxHealth: Number.isFinite(source.maxHealth) ? source.maxHealth : base.maxHealth,
+                    fuel: Number.isFinite(source.fuel) ? source.fuel : base.fuel,
+                    maxFuel: Number.isFinite(source.maxFuel) ? source.maxFuel : base.maxFuel,
+                    energy: Number.isFinite(source.energy) ? source.energy : base.energy,
+                    maxEnergy: Number.isFinite(source.maxEnergy) ? source.maxEnergy : base.maxEnergy,
+                    ultimateQueued: Boolean(source.ultimateQueued),
+                    charging: Boolean(source.charging),
+                    groundAngle: Number.isFinite(source.groundAngle) ? source.groundAngle : base.groundAngle,
+                    shake: Number.isFinite(source.shake) ? source.shake : 0,
+                    shakeX: Number.isFinite(source.shakeX) ? source.shakeX : 0,
+                    shakeY: Number.isFinite(source.shakeY) ? source.shakeY : 0,
+                    alive: source.alive !== false,
+                    deadFadeUntilMs: Number(source.deadFadeUntilMs) || 0
+                };
+            });
+
+            return setOnlineCombatSeatPair(online.combat.currentTurnUid);
         }
 
         function getSlotVisuals(slot) {
@@ -345,6 +479,9 @@
             player.maxHealth = state.maxHealth;
             player.fuel = state.fuel;
             player.maxFuel = state.maxFuel;
+            player.energy = state.energy;
+            player.maxEnergy = state.maxEnergy;
+            player.ultimateQueued = Boolean(state.ultimateQueued);
             player.charging = Boolean(state.charging);
             player.groundAngle = state.groundAngle;
             const visuals = getSlotVisuals(state.slot);
@@ -468,6 +605,9 @@
             state.maxHealth = player.maxHealth;
             state.fuel = player.fuel;
             state.maxFuel = player.maxFuel;
+            state.energy = player.energy;
+            state.maxEnergy = player.maxEnergy;
+            state.ultimateQueued = Boolean(player.ultimateQueued);
             state.groundAngle = player.groundAngle;
             state.alive = player.health > 0;
             state.deadFadeUntilMs = Number(player.deadFadeUntilMs) || 0;
@@ -521,6 +661,10 @@
                 return;
             }
 
+            if (online.authoritativeMatch && hydrateOnlineCombatFromMatch(online.authoritativeMatch)) {
+                return;
+            }
+
             const roster = [...(online.participants || [])]
                 .sort((a, b) => Number(a.slot) - Number(b.slot));
 
@@ -552,6 +696,145 @@
                 }
             }
             return `Player ${game.currentPlayer}`;
+        }
+
+        function getHudNameForPlayer(player) {
+            if (isOnlineMultiParticipantCombat()) {
+                const seat = player === player1 ? 1 : 2;
+                const state = getStateBySeat(seat);
+                if (state && state.name) {
+                    return getShortDisplayName(state.name, 16);
+                }
+            }
+            return player === player1 ? 'Player 1' : 'Player 2';
+        }
+
+        function getHudFocusPlayer() {
+            if (online.active) {
+                return getLocalPlayerSlot() === 2 ? player2 : player1;
+            }
+            return player1;
+        }
+
+        function getEnergyRatio(player) {
+            return Math.max(0, Math.min(1, Number(player.energy || 0) / Math.max(1, Number(player.maxEnergy || 100))));
+        }
+
+        function getUltimateProfileForPlayer(player) {
+            const vehicleType = String(player && player.vehicleType ? player.vehicleType : '').trim().toLowerCase();
+            if (vehicleType === 'catrket') {
+                return CATRKET_ULTIMATE_PROFILE;
+            }
+            return null;
+        }
+
+        function getProjectileMultiplier(key, fallback = 1) {
+            if (!projectile) {
+                return fallback;
+            }
+            const value = Number(projectile[key]);
+            return Number.isFinite(value) && value > 0 ? value : fallback;
+        }
+
+        function isUltimateCinematicActive() {
+            return Boolean(projectile && projectile.isUltimate);
+        }
+
+        function isUltimateReady(player) {
+            return getEnergyRatio(player) >= 1;
+        }
+
+        function addEnergyToPlayer(player, amount) {
+            if (!player || !Number.isFinite(amount) || amount <= 0) {
+                return;
+            }
+            const cap = Math.max(1, Number(player.maxEnergy || 100));
+            player.energy = Math.min(cap, Math.max(0, Number(player.energy || 0) + amount));
+        }
+
+        function addEnergyToState(state, amount) {
+            if (!state || !Number.isFinite(amount) || amount <= 0) {
+                return;
+            }
+            const cap = Math.max(1, Number(state.maxEnergy || 100));
+            state.energy = Math.min(cap, Math.max(0, Number(state.energy || 0) + amount));
+            state.ultimateQueued = false;
+            applySeatPlayerStateFromCombatState(state);
+        }
+
+        function addEnergyByUid(uid, amount) {
+            if (!uid) {
+                return;
+            }
+            const state = online.combat.playerStates[uid];
+            if (!state) {
+                return;
+            }
+            addEnergyToState(state, amount);
+        }
+
+        function updateEnergyRegen(dt = 1) {
+            const regenAmount = ENERGY_REGEN_PER_TICK * dt;
+            if (isOnlineMultiParticipantCombat()) {
+                (online.combat.turnOrder || []).forEach((uid) => {
+                    const state = online.combat.playerStates[uid];
+                    if (state && state.alive) {
+                        addEnergyByUid(uid, regenAmount);
+                    }
+                });
+                return;
+            }
+
+            addEnergyToPlayer(player1, regenAmount);
+            addEnergyToPlayer(player2, regenAmount);
+        }
+
+        function getProjectilePlayerHitRadius() {
+            return 30 * getProjectileMultiplier('blastPowerMultiplier', 1);
+        }
+
+        function getProjectileSplashHitRadius() {
+            return 60 * getProjectileMultiplier('blastPowerMultiplier', 1);
+        }
+
+        function getProjectileDirectHitDamage() {
+            const baseDamage = online.active ? 28 : (20 + Math.random() * 15);
+            const adjusted = baseDamage * getProjectileMultiplier('damageMultiplier', 1);
+            return getDamageWithModifiers(adjusted);
+        }
+
+        function getProjectileSplashDamage() {
+            const baseDamage = 10 * getProjectileMultiplier('damageMultiplier', 1);
+            return getDamageWithModifiers(baseDamage);
+        }
+
+        function updateUltimateButton() {
+            if (!ultimateButton) {
+                return;
+            }
+
+            if (!game.isRunning || game.prematchScan.active) {
+                ultimateButton.style.display = 'none';
+                ultimateButton.disabled = true;
+                ultimateButton.classList.remove('ready');
+                ultimateButton.classList.remove('charged');
+                ultimateButton.classList.remove('armed');
+                return;
+            }
+
+            const canControlTurn = !online.active ? game.currentPlayer === 1 : isLocalTurnOwner();
+            const hudPlayer = getHudFocusPlayer();
+            const isReady = Boolean(hudPlayer) && isUltimateReady(hudPlayer);
+            const isArmed = isReady && Boolean(hudPlayer && hudPlayer.ultimateQueued);
+            const interactive = isReady && canControlTurn && !projectile && !game.waitingForTurn && !game.endSlowMo;
+
+            // The base HUD SVG already draws the button body; only show hit target when energy is ready.
+            ultimateButton.style.display = isReady ? 'block' : 'none';
+            ultimateButton.disabled = !interactive;
+            ultimateButton.classList.toggle('charged', isReady);
+            ultimateButton.classList.toggle('ready', interactive);
+            ultimateButton.classList.toggle('armed', isArmed);
+            ultimateButton.textContent = isArmed ? 'Armed' : 'Ultimate';
         }
 
         function isLocalTurnOwner() {
@@ -1450,6 +1733,10 @@
                 const readyCount = online.participants.filter((p) => readyByUid[p.uid] === true).length;
                 online.readyToStart = participantCount > 0 && readyCount === participantCount;
                 online.settings = room.settings || null;
+                online.authoritativeMatch = room.match && typeof room.match === 'object' ? room.match : null;
+                online.activeMatchId = online.authoritativeMatch && online.authoritativeMatch.id
+                    ? String(online.authoritativeMatch.id)
+                    : null;
                 updateRoomMeta();
 
                 if (room.status === 'waiting') {
@@ -1476,15 +1763,20 @@
                     setOnlineStatus('Online match started.');
                 }
 
-                const remoteLive = room.liveState
-                    ? (getLocalPlayerSlot() === 1 ? room.liveState.p2 : (getLocalPlayerSlot() === 2 ? room.liveState.p1 : null))
-                    : null;
-                if (remoteLive && remoteLive.uid && remoteLive.uid !== online.localUid) {
-                    applyRemoteLiveState(remoteLive);
+                if (shouldUseSeatLiveSync()) {
+                    const remoteLive = room.liveState
+                        ? (getLocalPlayerSlot() === 1 ? room.liveState.p2 : (getLocalPlayerSlot() === 2 ? room.liveState.p1 : null))
+                        : null;
+                    if (remoteLive && remoteLive.uid && remoteLive.uid !== online.localUid) {
+                        applyRemoteLiveState(remoteLive);
+                    }
                 }
 
                 if (room.lastAction && room.lastAction.id && room.lastAction.id !== online.lastProcessedActionId) {
                     const action = room.lastAction;
+                    if (action.matchId && online.activeMatchId && action.matchId !== online.activeMatchId) {
+                        return;
+                    }
                     online.lastProcessedActionId = action.id;
                     if (action.actorUid !== online.localUid) {
                         applyRemoteAction(action);
@@ -1562,6 +1854,8 @@
                 online.hostReady = false;
                 online.guestReady = false;
                 online.settings = settings;
+                online.activeMatchId = null;
+                online.authoritativeMatch = null;
                 updateRoomMeta();
 
                 const input = document.getElementById('roomCodeInput');
@@ -1692,6 +1986,8 @@
                 online.hostReady = Boolean(joinResult.room.hostReady);
                 online.guestReady = Boolean(joinResult.room.guestReady);
                 online.settings = joinResult.room.settings || null;
+                online.activeMatchId = null;
+                online.authoritativeMatch = null;
                 updateRoomMeta();
                 subscribeToRoom(code);
 
@@ -1760,6 +2056,8 @@
             online.readyByUid = {};
             resetOnlineCombatState();
             online.settings = null;
+            online.activeMatchId = null;
+            online.authoritativeMatch = null;
             online.lastLiveSyncAt = 0;
             online.lastLiveSignature = '';
             online.lastAppliedLiveTs = 0;
@@ -2153,18 +2451,20 @@
             }
         }
 
-        async function sendOnlineAction(player) {
+        async function sendOnlineAction(player, usesUltimate = false) {
             if (!online.active || !online.roomRef || online.applyingRemoteAction) {
                 return;
             }
             const action = {
                 id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                 actorUid: online.localUid,
+                matchId: online.activeMatchId || null,
                 player: game.currentPlayer,
                 x: player.x,
                 angle: player.angle,
                 aimFacing: player.aimFacing,
                 power: player.power,
+                usesUltimate: Boolean(usesUltimate),
                 ts: Date.now()
             };
             online.lastProcessedActionId = action.id;
@@ -2184,6 +2484,9 @@
             if (!online.active || !online.roomRef || online.applyingRemoteAction || !game.isRunning) {
                 return;
             }
+            if (!shouldUseSeatLiveSync()) {
+                return;
+            }
 
             const now = Date.now();
             const payload = {
@@ -2195,6 +2498,8 @@
                 power: player.power,
                 aimFacing: player.aimFacing,
                 fuel: player.fuel,
+                energy: player.energy,
+                ultimateQueued: Boolean(player.ultimateQueued),
                 charging: Boolean(player.charging),
                 ts: now
             };
@@ -2207,6 +2512,8 @@
                 Math.round(payload.power),
                 payload.aimFacing,
                 Math.round(payload.fuel),
+                Math.round(payload.energy),
+                payload.ultimateQueued ? 1 : 0,
                 payload.charging ? 1 : 0
             ].join(':');
 
@@ -2280,6 +2587,10 @@
             if (Number.isFinite(state.fuel)) {
                 player.fuel = Math.max(0, Math.min(player.maxFuel, state.fuel));
             }
+            if (Number.isFinite(state.energy)) {
+                player.energy = Math.max(0, Math.min(player.maxEnergy, state.energy));
+            }
+            player.ultimateQueued = Boolean(state.ultimateQueued);
             player.charging = Boolean(state.charging);
 
             const surface = getSurfaceBelowY(player.x, player.y + 40);
@@ -2307,24 +2618,34 @@
             }
             player.angle = clampPlayerLocalAngle(player, action.angle);
             player.power = Math.max(1, Math.min(100, action.power));
+            player.ultimateQueued = Boolean(action.usesUltimate);
             const surface = getSurfaceBelowY(player.x, player.y + 40);
             player.y = surface.y - 40;
             player.groundAngle = surface.slope;
 
             online.applyingRemoteAction = true;
-            fire(player);
+            fire(player, { usesUltimate: Boolean(action.usesUltimate) });
             online.applyingRemoteAction = false;
             player.power = 0;
         }
 
-        function updateCamera(targetX) {
+        function clampCameraY(y) {
+            const minY = -CAMERA_TOP_OVERSCAN;
+            const maxY = Math.max(0, WORLD_HEIGHT - VIEW_HEIGHT);
+            return Math.max(minY, Math.min(maxY, y));
+        }
+
+        function updateCamera(targetX, targetY) {
             const desired = Math.max(0, Math.min(WORLD_WIDTH - VIEW_WIDTH, targetX - VIEW_WIDTH / 2));
+            const desiredY = clampCameraY(targetY - VIEW_HEIGHT * 0.58);
             if (game.cameraSnap) {
                 camera.x = desired;
+                camera.y = desiredY;
                 game.cameraSnap = false;
                 return;
             }
             camera.x += (desired - camera.x) * 0.08;
+            camera.y += (desiredY - camera.y) * 0.08;
         }
 
         function randRange(min, max) {
@@ -2372,6 +2693,119 @@
                 return target;
             }
             return current + Math.sign(delta) * maxDelta;
+        }
+        const CHARACTER_SVG_ASSETS = {
+            catrket: {
+                src: 'svg/char-catrket/CATRKET.svg',
+                image: null,
+                ready: false,
+                failed: false,
+                // The source SVG points left, so mirror when player is facing right.
+                nativeFacing: -1,
+                drawWidth: 114,
+                drawHeight: 106,
+                drawOffsetX: -57,
+                drawOffsetY: -62
+            }
+        };
+
+        const BOTTOM_UI_ASSET = {
+            src: 'svg/Bottom-UI/Bottom-UI.svg',
+            image: null,
+            ready: false,
+            failed: false,
+            cropY: 487,
+            cropHeight: 213
+        };
+
+        function getAssetUrlCandidates(relativePath) {
+            const cleanPath = String(relativePath || '').replace(/^\.?\//, '');
+            const candidates = [];
+            const pushUnique = (url) => {
+                if (!url || candidates.includes(url)) {
+                    return;
+                }
+                candidates.push(url);
+            };
+
+            // Prefer resolving from the script location so loading works from any host page.
+            const scriptTag = Array.from(document.scripts || []).find((scriptEl) => /gunrider\.js(?:\?|$)/i.test(String(scriptEl.src || '')));
+            if (scriptTag && scriptTag.src) {
+                try {
+                    pushUnique(new URL(`../../${cleanPath}`, scriptTag.src).toString());
+                } catch (_err) {
+                    // Ignore URL construction failures and fall back to relative paths.
+                }
+            }
+
+            pushUnique(cleanPath);
+            pushUnique(`./${cleanPath}`);
+            pushUnique(`04 - Gun Rider/${cleanPath}`);
+            pushUnique(`./04 - Gun Rider/${cleanPath}`);
+            return candidates;
+        }
+
+        function loadImageWithFallback(image, pathCandidates, onSuccess, onFailure) {
+            const candidates = Array.isArray(pathCandidates) ? pathCandidates.filter(Boolean) : [];
+            let index = 0;
+
+            const tryNext = () => {
+                if (index >= candidates.length) {
+                    onFailure();
+                    return;
+                }
+                image.src = candidates[index++];
+            };
+
+            image.onload = () => {
+                onSuccess();
+            };
+            image.onerror = () => {
+                tryNext();
+            };
+
+            tryNext();
+        }
+
+        function initCharacterSvgAssets() {
+            Object.values(CHARACTER_SVG_ASSETS).forEach(asset => {
+                const img = new Image();
+                asset.image = img;
+                loadImageWithFallback(
+                    img,
+                    getAssetUrlCandidates(asset.src),
+                    () => {
+                    asset.ready = true;
+                    asset.failed = false;
+                    },
+                    () => {
+                    asset.ready = false;
+                    asset.failed = true;
+                    }
+                );
+            });
+        }
+
+        function initBottomUiAsset() {
+            const img = new Image();
+            BOTTOM_UI_ASSET.image = img;
+            loadImageWithFallback(
+                img,
+                getAssetUrlCandidates(BOTTOM_UI_ASSET.src),
+                () => {
+                BOTTOM_UI_ASSET.ready = true;
+                BOTTOM_UI_ASSET.failed = false;
+                },
+                () => {
+                BOTTOM_UI_ASSET.ready = false;
+                BOTTOM_UI_ASSET.failed = true;
+                }
+            );
+        }
+
+        function getCharacterSvgAsset(player) {
+            const key = String(player.vehicleType || '').trim().toLowerCase();
+            return CHARACTER_SVG_ASSETS[key] || null;
         }
 
         const VEHICLE_PROFILES = {
@@ -2498,6 +2932,9 @@
             maxHealth: 100,
             fuel: 300,
             maxFuel: 300,
+            energy: 0,
+            maxEnergy: 100,
+            ultimateQueued: false,
             color: '#4ecdc4',
             charging: false,
             vehicleColor: '#667eea',
@@ -2520,6 +2957,9 @@
             maxHealth: 100,
             fuel: 300,
             maxFuel: 300,
+            energy: 0,
+            maxEnergy: 100,
+            ultimateQueued: false,
             color: '#ff6b6b',
             charging: false,
             vehicleColor: '#764ba2',
@@ -3453,6 +3893,7 @@
             game.endSlowMo = false;
             game.timeScale = 1;
             game.cameraHoldX = null;
+            game.cameraHoldY = null;
             game.botThinking = false;
             resetKillingTime();
             if (online.active) {
@@ -3502,6 +3943,10 @@
             player2.health = player2.maxHealth;
             player1.fuel = player1.maxFuel;
             player2.fuel = player2.maxFuel;
+            player1.energy = 0;
+            player2.energy = 0;
+            player1.ultimateQueued = false;
+            player2.ultimateQueued = false;
             player1.power = 0;
             player2.power = 0;
             player1.charging = false;
@@ -3534,6 +3979,7 @@
             game.maxTurnTime = 12;
             game.turnTimeLeft = game.maxTurnTime;
             game.cameraHoldX = null;
+            game.cameraHoldY = null;
             game.cameraShake = 0;
             game.cameraShakeX = 0;
             game.cameraShakeY = 0;
@@ -3613,7 +4059,9 @@
             game.cameraShakeX = 0;
             game.cameraShakeY = 0;
             game.cameraHoldX = null;
+            game.cameraHoldY = null;
             camera.x = game.prematchScan.sweepFromX;
+            camera.y = 0;
 
             // Keep opening scan quiet; gameplay BGM starts only after scan ends.
             gameplayBgmMode = 'off';
@@ -3640,9 +4088,28 @@
 
                 if (online.localSeat === 1) {
                     try {
+                        const roomDoc = await online.roomRef.get();
+                        if (!roomDoc.exists) {
+                            setOnlineStatus('Room no longer exists.', true);
+                            return;
+                        }
+                        const roomData = roomDoc.data() || {};
+                        const roster = normalizeRoomParticipants(roomData);
+                        const settings = roomData.settings || online.settings || getSpawnSettings();
+                        online.settings = settings;
+
+                        const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                        const matchPayload = buildAuthoritativeMatchPayload(matchId, roster, settings);
+
+                        online.activeMatchId = matchId;
+                        online.authoritativeMatch = matchPayload;
+
                         await online.roomRef.set({
                             status: 'playing',
                             killingTimeStart: Boolean(forceKillingTime),
+                            match: matchPayload,
+                            liveState: {},
+                            lastAction: null,
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });
                     } catch (error) {
@@ -3736,6 +4203,10 @@
             return event.code === 'Space' || event.key === ' ' || event.key === 'Space' || event.key === 'Spacebar';
         }
 
+        function isUltimateKey(event) {
+            return event.code === 'KeyE' || event.key === 'e' || event.key === 'E';
+        }
+
         window.addEventListener('keydown', (e) => {
             keys[e.key] = true;
             
@@ -3768,6 +4239,19 @@
                     chargeInput.owner = game.currentPlayer;
                     chargeInput.releaseQueued = false;
                     setChargingSoundActive(true);
+                }
+            }
+
+            if (isUltimateKey(e) && game.isRunning && !projectile) {
+                e.preventDefault();
+                const canControlTurn = isLocalTurnOwner();
+                if (!canControlTurn || game.waitingForTurn || game.endSlowMo) {
+                    return;
+                }
+                const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+                if (isUltimateReady(currentPlayerObj)) {
+                    currentPlayerObj.ultimateQueued = true;
+                    updateUltimateButton();
                 }
             }
         });
@@ -3805,10 +4289,38 @@
             }
         });
 
-        function fire(player) {
+        if (ultimateButton) {
+            ultimateButton.addEventListener('click', () => {
+                if (!game.isRunning || projectile || game.waitingForTurn || game.endSlowMo) {
+                    return;
+                }
+
+                const canControlTurn = !online.active ? game.currentPlayer === 1 : isLocalTurnOwner();
+                if (!canControlTurn) {
+                    return;
+                }
+
+                const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+                if (!isUltimateReady(currentPlayerObj)) {
+                    return;
+                }
+
+                currentPlayerObj.ultimateQueued = true;
+                updateUltimateButton();
+            });
+        }
+
+        function fire(player, options = {}) {
             setChargingSoundActive(false);
             chargeInput.releaseQueued = false;
             chargeInput.owner = null;
+
+            const shouldUseUltimate = Boolean(options.usesUltimate) && isUltimateReady(player);
+            const ultimateProfile = shouldUseUltimate ? getUltimateProfileForPlayer(player) : null;
+            if (shouldUseUltimate) {
+                player.energy = 0;
+            }
+            player.ultimateQueued = false;
             
             // Check if this shot will be the final shot (opponent will die)
             const otherPlayer = player === player1 ? player2 : player1;
@@ -3838,12 +4350,15 @@
                 y: player.y - 20,
                 vx: Math.cos(angleRad) * velocity,
                 vy: -Math.sin(angleRad) * velocity,
-                radius: 8,
+                radius: 8 * (shouldUseUltimate ? (ultimateProfile ? ultimateProfile.projectileSizeMultiplier : 1.5) : 1),
+                isUltimate: shouldUseUltimate,
+                blastPowerMultiplier: shouldUseUltimate ? (ultimateProfile ? ultimateProfile.blastPowerMultiplier : 1.5) : 1,
+                damageMultiplier: shouldUseUltimate ? (ultimateProfile ? ultimateProfile.damageMultiplier : 1.5) : 1,
                 trail: []
             };
 
             if (online.active && !online.applyingRemoteAction) {
-                sendOnlineAction(player);
+                sendOnlineAction(player, shouldUseUltimate);
             }
             
             player.power = 0;
@@ -3866,10 +4381,12 @@
             // Check platform collision
             if (isPointInPlatform(projectile.x, projectile.y)) {
                 playOneShot(impactGroundSound, sfxCue.impactGround);
-                createExplosion(projectile.x, projectile.y);
-                createPlatformCrater(projectile.x, projectile.y);
+                const blastPower = getProjectileMultiplier('blastPowerMultiplier', 1);
+                createExplosion(projectile.x, projectile.y, blastPower);
+                createPlatformCrater(projectile.x, projectile.y, blastPower);
                 checkHit(projectile.x, projectile.y);
                 game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, projectile.y));
                 projectile = null;
                 switchTurn();
                 return;
@@ -3879,12 +4396,14 @@
             const surface = getSurfaceBelowY(projectile.x, projectile.y);
             if (projectile.y >= surface.y) {
                 playOneShot(impactGroundSound, sfxCue.impactGround);
-                createExplosion(projectile.x, surface.y);
+                const blastPower = getProjectileMultiplier('blastPowerMultiplier', 1);
+                createExplosion(projectile.x, surface.y, blastPower);
                 if (surface.source === 'ground') {
-                    createCrater(projectile.x, surface.y);
+                    createCrater(projectile.x, surface.y, blastPower);
                 }
                 checkHit(projectile.x, surface.y);
                 game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, surface.y));
                 projectile = null;
                 switchTurn();
                 return;
@@ -3902,7 +4421,7 @@
                     if (!state || !state.alive) {
                         continue;
                     }
-                    if (Math.hypot(projectile.x - state.x, projectile.y - state.y) < 30) {
+                    if (Math.hypot(projectile.x - state.x, projectile.y - state.y) < getProjectilePlayerHitRadius()) {
                         hitState = state;
                         break;
                     }
@@ -3910,8 +4429,10 @@
 
                 if (hitState) {
                     playOneShot(impactVehicleSound, sfxCue.impactVehicle);
-                    const damage = getDamageWithModifiers(online.active ? 28 : (20 + Math.random() * 15));
+                    const damage = getProjectileDirectHitDamage();
                     hitState.health = Math.max(0, hitState.health - damage);
+                    addEnergyByUid(attackerUid, ENERGY_GAIN_ON_HIT);
+                    addEnergyByUid(hitState.uid, ENERGY_GAIN_ON_HIT_TAKEN);
 
                     const hitSeat = online.combat.seatUids[1] === hitState.uid
                         ? 1
@@ -3926,8 +4447,9 @@
                     }
 
                     game.cameraShake = 12;
-                    createExplosion(projectile.x, projectile.y);
+                    createExplosion(projectile.x, projectile.y, getProjectileMultiplier('blastPowerMultiplier', 1));
                     game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                    game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, projectile.y));
                     projectile = null;
 
                     if (hitState.health <= 0) {
@@ -3952,10 +4474,12 @@
                 const dy = projectile.y - checkPlayer.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
-                if (distance < 30) {
+                if (distance < getProjectilePlayerHitRadius()) {
                     playOneShot(impactVehicleSound, sfxCue.impactVehicle);
-                    const damage = getDamageWithModifiers(online.active ? 28 : (20 + Math.random() * 15));
+                    const damage = getProjectileDirectHitDamage();
                     checkPlayer.health = Math.max(0, checkPlayer.health - damage);
+                    addEnergyToPlayer(game.currentPlayer === 1 ? player1 : player2, ENERGY_GAIN_ON_HIT);
+                    addEnergyToPlayer(checkPlayer, ENERGY_GAIN_ON_HIT_TAKEN);
 
                     // Apply knockback effect - push away from projectile
                     const knockbackDir = Math.sign(checkPlayer.x - projectile.x);
@@ -3968,8 +4492,9 @@
                     // Trigger camera shake
                     game.cameraShake = 12;
 
-                    createExplosion(projectile.x, projectile.y);
+                    createExplosion(projectile.x, projectile.y, getProjectileMultiplier('blastPowerMultiplier', 1));
                     game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                    game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, projectile.y));
                     projectile = null;
 
                     if (checkPlayer.health <= 0) {
@@ -3985,6 +4510,7 @@
             // Check boundaries
             if (projectile.x < 0 || projectile.x > WORLD_WIDTH || projectile.y > WORLD_HEIGHT) {
                 game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, projectile.y));
                 projectile = null;
                 switchTurn();
             }
@@ -3992,25 +4518,28 @@
 
         let explosionParticles = [];
 
-        function createExplosion(x, y) {
-            for (let i = 0; i < 30; i++) {
+        function createExplosion(x, y, blastPowerMultiplier = 1) {
+            const power = Math.max(1, Number(blastPowerMultiplier) || 1);
+            const particleCount = Math.round(30 * power);
+            for (let i = 0; i < particleCount; i++) {
                 const angle = Math.random() * Math.PI * 2;
-                const speed = Math.random() * 5 + 2;
+                const speed = (Math.random() * 5 + 2) * Math.sqrt(power);
                 explosionParticles.push({
                     x, y,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
                     life: 1,
-                    size: Math.random() * 5 + 2,
+                    size: (Math.random() * 5 + 2) * Math.min(1.6, 0.9 + (power * 0.35)),
                     color: `hsl(${Math.random() * 60 + 20}, 100%, 60%)`
                 });
             }
         }
 
-        function createCrater(x, y) {
+        function createCrater(x, y, blastPowerMultiplier = 1) {
             // Modify terrain to create an actual crater/hole
-            const craterRadius = 60;
-            const craterDepth = 50; // Back to original depth
+            const power = Math.max(1, Number(blastPowerMultiplier) || 1);
+            const craterRadius = 60 * power;
+            const craterDepth = 50 * power;
             
             // Find all terrain points within crater radius and lower them
             for (let i = 0; i < terrain.length; i++) {
@@ -4034,10 +4563,11 @@
             player2.groundAngle = getSurfaceBelowY(player2.x, player2.y + 40 - SURFACE_SNAP_GRACE).slope;
         }
 
-        function createPlatformCrater(x, y) {
-            const craterRadius = 44;
+        function createPlatformCrater(x, y, blastPowerMultiplier = 1) {
+            const power = Math.max(1, Number(blastPowerMultiplier) || 1);
+            const craterRadius = 44 * power;
             const circleScale = 0.47;
-            const punctureRadius = 14;
+            const punctureRadius = 14 * Math.sqrt(power);
             const punctureThreshold = 11;
 
             const nextBodies = [];
@@ -4257,17 +4787,22 @@
         function checkHit(x, y) {
             if (isOnlineMultiParticipantCombat()) {
                 let didHitVehicle = false;
+                let hitCount = 0;
                 const states = getDisplayCombatStates();
+                const splashRadius = getProjectileSplashHitRadius();
+                const attackerUid = online.combat.currentTurnUid;
 
                 states.forEach((state) => {
                     const dist = Math.hypot(x - state.x, y - state.y);
-                    if (dist >= 60) {
+                    if (dist >= splashRadius) {
                         return;
                     }
 
                     didHitVehicle = true;
-                    const damage = getDamageWithModifiers(10);
+                    hitCount += 1;
+                    const damage = getProjectileSplashDamage();
                     state.health = Math.max(0, state.health - damage);
+                    addEnergyToState(state, ENERGY_GAIN_ON_HIT_TAKEN);
 
                     const isSeat1 = online.combat.seatUids[1] === state.uid;
                     const isSeat2 = online.combat.seatUids[2] === state.uid;
@@ -4291,6 +4826,10 @@
                     }
                 });
 
+                if (hitCount > 0) {
+                    addEnergyByUid(attackerUid, ENERGY_GAIN_ON_HIT * hitCount);
+                }
+
                 if (didHitVehicle) {
                     playOneShot(impactVehicleSound, sfxCue.impactVehicle);
                     const leftAlive = getAliveCountBySide('left');
@@ -4305,12 +4844,15 @@
 
             const dist1 = Math.sqrt((x - player1.x) ** 2 + (y - player1.y) ** 2);
             const dist2 = Math.sqrt((x - player2.x) ** 2 + (y - player2.y) ** 2);
+            const splashRadius = getProjectileSplashHitRadius();
             let didHitVehicle = false;
             
-            if (dist1 < 60) {
+            if (dist1 < splashRadius) {
                 didHitVehicle = true;
-                const damage = getDamageWithModifiers(10);
+                const damage = getProjectileSplashDamage();
                 player1.health = Math.max(0, player1.health - damage);
+                addEnergyToPlayer(player1, ENERGY_GAIN_ON_HIT_TAKEN);
+                addEnergyToPlayer(player2, ENERGY_GAIN_ON_HIT);
                 
                 // Apply knockback from explosion
                 const knockbackDir1 = Math.sign(player1.x - x);
@@ -4336,10 +4878,12 @@
                     }
                 }
             }
-            if (dist2 < 60) {
+            if (dist2 < splashRadius) {
                 didHitVehicle = true;
-                const damage = getDamageWithModifiers(10);
+                const damage = getProjectileSplashDamage();
                 player2.health = Math.max(0, player2.health - damage);
+                addEnergyToPlayer(player2, ENERGY_GAIN_ON_HIT_TAKEN);
+                addEnergyToPlayer(player1, ENERGY_GAIN_ON_HIT);
                 
                 // Apply knockback from explosion
                 const knockbackDir2 = Math.sign(player2.x - x);
@@ -4375,6 +4919,8 @@
             // Force-stop charging state so timeout cannot leave charge audio stuck on.
             player1.charging = false;
             player2.charging = false;
+            player1.ultimateQueued = false;
+            player2.ultimateQueued = false;
             resetAimInput();
             chargeInput.releaseQueued = false;
             chargeInput.owner = null;
@@ -4387,6 +4933,7 @@
         
         function processTurnSwitch() {
             game.cameraHoldX = null;
+            game.cameraHoldY = null;
 
             if (isOnlineMultiParticipantCombat()) {
                 persistSeatToState(1);
@@ -4595,7 +5142,7 @@
                     actor.power = Math.min(game.botCalculatedPower, actor.power + CHARGE_RATE_PER_TICK * dt);
                 } else {
                     // Fire!
-                    fire(actor);
+                    fire(actor, { usesUltimate: isUltimateReady(actor) });
                     actor.charging = false;
                     game.botThinking = false;
                 }
@@ -4842,6 +5389,7 @@
                 setEngineSoundMoving(false);
                 setChargingSoundActive(false);
                 tryPlayMapScanBgm();
+                updateUltimateButton();
                 return;
             }
 
@@ -4850,7 +5398,12 @@
                 setChargingSoundActive(false);
                 updateConnectionIndicator();
                 updateMatchClock(0);
+                updateUltimateButton();
                 return;
+            }
+
+            if (!game.endSlowMo) {
+                game.timeScale = isUltimateCinematicActive() ? ULTIMATE_SLOW_MO_SCALE : 1;
             }
 
             const dt = game.timeScale;
@@ -4896,7 +5449,7 @@
                 if (game.turnTimeLeft <= 0) {
                     const timeoutPlayer = game.currentPlayer === 1 ? player1 : player2;
                     if (timeoutPlayer.charging && timeoutPlayer.power > 0) {
-                        fire(timeoutPlayer);
+                        fire(timeoutPlayer, { usesUltimate: Boolean(timeoutPlayer.ultimateQueued) });
                         timeoutPlayer.charging = false;
                     } else {
                         switchTurn();
@@ -4907,12 +5460,17 @@
             const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
             const otherPlayerObj = game.currentPlayer === 1 ? player2 : player1;
 
+            updateEnergyRegen(dt);
+
             beginBotTurnIfNeeded();
 
             const cameraTargetX = projectile
                 ? projectile.x
                 : (game.cameraHoldX !== null ? game.cameraHoldX : currentPlayerObj.x);
-            updateCamera(cameraTargetX);
+            const cameraTargetY = projectile
+                ? projectile.y
+                : (game.cameraHoldY !== null ? game.cameraHoldY : currentPlayerObj.y);
+            updateCamera(cameraTargetX, cameraTargetY);
             
             // Bot AI update (skip if waiting for turn)
             if (!game.waitingForTurn && !game.endSlowMo) {
@@ -4968,7 +5526,7 @@
                 && !game.waitingForTurn
                 && !game.endSlowMo) {
                 if (currentPlayerObj.power > 0) {
-                    fire(currentPlayerObj);
+                    fire(currentPlayerObj, { usesUltimate: Boolean(currentPlayerObj.ultimateQueued) });
                 }
                 currentPlayerObj.charging = false;
                 setChargingSoundActive(false);
@@ -4983,7 +5541,7 @@
                     currentPlayerObj.power = 100;
                     currentPlayerObj.charging = false;
                     setChargingSoundActive(false);
-                    fire(currentPlayerObj);
+                    fire(currentPlayerObj, { usesUltimate: Boolean(currentPlayerObj.ultimateQueued) });
                 }
             }
             
@@ -5014,9 +5572,23 @@
             updateChargingSound();
             updateBGM();
             updateConnectionIndicator();
+            updateUltimateButton();
         }
         
         function updateShake() {
+            const applyEntityShake = (entity) => {
+                if (entity.shake > 0) {
+                    entity.shake--;
+                    const intensity = Math.max(0, Math.min(1.8, entity.shake / 10));
+                    const amplitude = 4 * (1 + intensity * 0.8);
+                    entity.shakeX = (Math.random() - 0.5) * amplitude;
+                    entity.shakeY = (Math.random() - 0.5) * amplitude;
+                } else {
+                    entity.shakeX = 0;
+                    entity.shakeY = 0;
+                }
+            };
+
             // Update camera shake
             if (game.cameraShake > 0) {
                 game.cameraShake--;
@@ -5028,23 +5600,8 @@
             }
             
             // Update player character shake
-            if (player1.shake > 0) {
-                player1.shake--;
-                player1.shakeX = (Math.random() - 0.5) * 4;
-                player1.shakeY = (Math.random() - 0.5) * 4;
-            } else {
-                player1.shakeX = 0;
-                player1.shakeY = 0;
-            }
-            
-            if (player2.shake > 0) {
-                player2.shake--;
-                player2.shakeX = (Math.random() - 0.5) * 4;
-                player2.shakeY = (Math.random() - 0.5) * 4;
-            } else {
-                player2.shakeX = 0;
-                player2.shakeY = 0;
-            }
+            applyEntityShake(player1);
+            applyEntityShake(player2);
 
             if (isOnlineMultiParticipantCombat()) {
                 (online.combat.turnOrder || []).forEach((uid) => {
@@ -5052,14 +5609,7 @@
                     if (!state || !state.alive) {
                         return;
                     }
-                    if (state.shake > 0) {
-                        state.shake--;
-                        state.shakeX = (Math.random() - 0.5) * 4;
-                        state.shakeY = (Math.random() - 0.5) * 4;
-                    } else {
-                        state.shakeX = 0;
-                        state.shakeY = 0;
-                    }
+                    applyEntityShake(state);
                     applySeatPlayerStateFromCombatState(state);
                 });
             }
@@ -5138,46 +5688,23 @@
                 return;
             }
 
-            ctx.save();
-            ctx.globalAlpha *= fadeAlpha;
-            // Apply character shake
-            ctx.translate(player.x + player.shakeX, player.y + player.shakeY);
-            // Rotate based on ground slope (negate to get correct tilt direction)
-            ctx.rotate(-player.groundAngle * Math.PI / 180);
-            
-            // Vehicle body
-            ctx.fillStyle = player.vehicleColor;
-            ctx.beginPath();
-            ctx.roundRect(-25, -10, 50, 25, 5);
-            ctx.fill();
-            
-            // Wheels
-            ctx.fillStyle = '#333';
-            ctx.beginPath();
-            ctx.arc(-15, 20, 8, 0, Math.PI * 2);
-            ctx.arc(15, 20, 8, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Character (cute blob)
-            ctx.fillStyle = player.color;
-            ctx.beginPath();
-            ctx.ellipse(0, -25, 12, 15, 0, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Eyes
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(-5, -27, 3, 0, Math.PI * 2);
-            ctx.arc(5, -27, 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#000';
-            ctx.beginPath();
-            ctx.arc(-5, -27, 1.5, 0, Math.PI * 2);
-            ctx.arc(5, -27, 1.5, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Gun barrel
-            if (isActive && !projectile) {
+            const now = performance.now();
+            const idleWave = Math.sin(now * 0.004 + (player.x * 0.01));
+            const idleStretchY = 1 + idleWave * 0.018;
+            const hitRatio = Math.max(0, Math.min(1, player.shake / 18));
+            const hitPulse = Math.abs(Math.sin(now * 0.03 + player.x * 0.07));
+            const hitStretchY = hitRatio * (0.08 + 0.07 * hitPulse);
+            const charScaleY = Math.max(0.82, Math.min(1.35, idleStretchY + hitStretchY));
+            const charScaleX = Math.max(0.82, Math.min(1.2, 1 - (charScaleY - 1) * 0.58));
+
+            const applyCharacterBodyTransform = (anchorY) => {
+                // Keep the character planted to the ground while scaling.
+                ctx.translate(0, anchorY);
+                ctx.scale(charScaleX, charScaleY);
+                ctx.translate(0, -anchorY);
+            };
+
+            const drawAimIndicatorBehind = () => {
                 const limits = getPlayerLocalAngleLimits(player);
                 const guideBaseX = 0;
                 const guideBaseY = -15;
@@ -5223,7 +5750,15 @@
                 );
                 ctx.stroke();
 
-                // In rotated canvas, just use player.angle directly
+                // Angle indicator uses the same local scale for both players.
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '12px Poppins';
+                const displayAngle = getPlayerDisplayAngle(player);
+                ctx.fillText(`${Math.round(displayAngle)}\u00B0`, -15, -45);
+            };
+
+            const drawGunBarrelFront = () => {
+                // In rotated canvas, just use player.angle directly.
                 const barrelAngleRad = (player.angle * Math.PI) / 180;
                 const barrelLength = 35;
                 ctx.strokeStyle = player.vehicleColor;
@@ -5232,114 +5767,298 @@
                 ctx.moveTo(0, -15);
                 ctx.lineTo(Math.cos(barrelAngleRad) * barrelLength, -Math.sin(barrelAngleRad) * barrelLength - 15);
                 ctx.stroke();
-                
-                // Angle indicator uses the same local scale for both players.
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                ctx.font = '12px Poppins';
-                const displayAngle = getPlayerDisplayAngle(player);
-                ctx.fillText(`${Math.round(displayAngle)}\u00B0`, -15, -45);
+            };
+            const drawFallbackPlayerArt = () => {
+                // Vehicle body
+                ctx.fillStyle = player.vehicleColor;
+                ctx.beginPath();
+                ctx.roundRect(-25, -10, 50, 25, 5);
+                ctx.fill();
+
+                // Wheels
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(-15, 20, 8, 0, Math.PI * 2);
+                ctx.arc(15, 20, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Character (cute blob)
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.ellipse(0, -25, 12, 15, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eyes
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(-5, -27, 3, 0, Math.PI * 2);
+                ctx.arc(5, -27, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-5, -27, 1.5, 0, Math.PI * 2);
+                ctx.arc(5, -27, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            };
+
+            ctx.save();
+            ctx.globalAlpha *= fadeAlpha;
+            // Apply character shake
+            ctx.translate(player.x + player.shakeX, player.y + player.shakeY);
+            // Rotate based on ground slope (negate to get correct tilt direction)
+            ctx.rotate(-player.groundAngle * Math.PI / 180);
+
+            // Draw angle indicator first so it appears behind the character art.
+            if (isActive && !projectile) {
+                drawAimIndicatorBehind();
+                drawGunBarrelFront();
             }
-            
+
+            const characterAsset = getCharacterSvgAsset(player);
+            if (characterAsset && characterAsset.ready && characterAsset.image) {
+                ctx.save();
+                const nativeFacing = characterAsset.nativeFacing === -1 ? -1 : 1;
+                if (player.aimFacing !== nativeFacing) {
+                    ctx.scale(-1, 1);
+                }
+                applyCharacterBodyTransform(characterAsset.drawOffsetY + characterAsset.drawHeight - 2);
+                ctx.drawImage(
+                    characterAsset.image,
+                    characterAsset.drawOffsetX,
+                    characterAsset.drawOffsetY,
+                    characterAsset.drawWidth,
+                    characterAsset.drawHeight
+                );
+                ctx.restore();
+            } else {
+                ctx.save();
+                applyCharacterBodyTransform(28);
+                drawFallbackPlayerArt();
+                ctx.restore();
+            }
+
             ctx.restore();
         }
 
-        function drawPlayerHud(player) {
-            // Health/Fuel bars (top corners)
-            const barWidth = 120;
-            const barHeight = 12;
-            const barY = 14;
-            const iconSize = 14;
-            const iconGap = 8;
-            const panelPad = 14;
-            const barX = player === player1
-                ? panelPad + iconSize + iconGap
-                : canvas.width - panelPad - iconSize - iconGap - barWidth;
-            const iconX = player === player1 ? panelPad : barX - iconGap - iconSize;
+        function drawBottomUiBase() {
+            if (!BOTTOM_UI_ASSET.ready || !BOTTOM_UI_ASSET.image) {
+                return false;
+            }
 
-            // Health icon (heart)
-            ctx.fillStyle = '#ff6b6b';
+            const img = BOTTOM_UI_ASSET.image;
+            const imgW = Number(img.naturalWidth || img.width || 0);
+            const imgH = Number(img.naturalHeight || img.height || 0);
+            if (imgW <= 0 || imgH <= 0) {
+                return false;
+            }
+
+            const srcX = 0;
+            const srcY = Math.max(0, Math.min(BOTTOM_UI_ASSET.cropY, imgH - 1));
+            const srcW = imgW;
+            const srcH = Math.max(1, Math.min(BOTTOM_UI_ASSET.cropHeight, imgH - srcY));
+            const destX = 0;
+            const destY = canvas.height - srcH;
+            ctx.drawImage(img, srcX, srcY, srcW, srcH, destX, destY, canvas.width, srcH);
+            return true;
+        }
+
+        function drawPlayerHud(player) {
+            if (!BOTTOM_UI_ASSET.ready || !BOTTOM_UI_ASSET.image) {
+                return;
+            }
+
+            const hpRatio = Math.max(0, Math.min(1, player.health / Math.max(1, player.maxHealth)));
+            const gasRatio = Math.max(0, Math.min(1, player.fuel / Math.max(1, player.maxFuel)));
+            const energyRatio = getEnergyRatio(player);
+            const chargeRatio = player.charging ? Math.max(0, Math.min(1, player.power / 100)) : 0;
+
+            const hpBarPath = new Path2D('M185 605H356.451C357.932 605 359.337 605.657 360.287 606.793L368.836 617.02C369.588 617.919 370 619.054 370 620.226V643H185V605Z');
+            const gasBarPath = new Path2D('M185 648H362.753C363.235 648 363.7 648.174 364.064 648.49L369.312 653.049C369.749 653.429 370 653.98 370 654.559V664H185V648Z');
+
+            const drawMissing = (clipPath, x, w, y, h, ratio) => {
+                const clamped = Math.max(0, Math.min(1, ratio));
+                const filled = clamped * w;
+                const missingX = x + filled;
+                const missingW = Math.max(0, w - filled);
+                if (missingW <= 0) {
+                    return;
+                }
+                ctx.save();
+                ctx.clip(clipPath);
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.fillStyle = '#000';
+                ctx.fillRect(missingX, y, missingW, h);
+                ctx.restore();
+            };
+
+            const drawMissingRect = (x, y, w, h, ratio) => {
+                const clamped = Math.max(0, Math.min(1, ratio));
+                const filled = clamped * w;
+                const missingX = x + filled;
+                const missingW = Math.max(0, w - filled);
+                if (missingW <= 0) {
+                    return;
+                }
+                ctx.save();
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.fillStyle = '#000';
+                ctx.fillRect(missingX, y, missingW, h);
+                ctx.restore();
+            };
+
+            // Left panel bars from exported SVG layout.
+            drawMissing(hpBarPath, 185, 185, 605, 38, hpRatio);
+            drawMissing(gasBarPath, 185, 185, 648, 16, gasRatio);
+
+            // Redraw status icons above bars so they never appear under bar masking.
+            const drawStatusIconBase = (cx, cy, r) => {
+                ctx.fillStyle = '#cfdced';
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#4f89a8';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            };
+
+            drawStatusIconBase(182.8, 623.8, 15);
+            drawStatusIconBase(183.0, 656.0, 10.4);
+
+            // Heart icon
+            ctx.fillStyle = '#db3333';
             ctx.beginPath();
-            const hx = iconX + iconSize / 2;
-            const hy = barY + iconSize / 2 - 1;
-            ctx.moveTo(hx, hy + 4);
-            ctx.bezierCurveTo(hx - 6, hy - 2, hx - 8, hy + 6, hx, hy + 9);
-            ctx.bezierCurveTo(hx + 8, hy + 6, hx + 6, hy - 2, hx, hy + 4);
+            ctx.moveTo(182.8, 631.2);
+            ctx.bezierCurveTo(176.5, 626.8, 173.8, 619.7, 178.9, 617.1);
+            ctx.bezierCurveTo(181.0, 616.1, 183.1, 617.0, 184.1, 619.0);
+            ctx.bezierCurveTo(186.0, 616.0, 189.8, 615.2, 192.3, 617.2);
+            ctx.bezierCurveTo(195.6, 619.8, 194.1, 625.9, 182.8, 631.2);
             ctx.fill();
 
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-
-            const healthWidth = (player.health / player.maxHealth) * barWidth;
-            ctx.fillStyle = player.health > 50 ? '#2ecc71' : player.health > 25 ? '#f7b731' : '#ff6b6b';
-            ctx.fillRect(barX, barY, healthWidth, barHeight);
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-            // Fuel icon (gas pump)
-            const fuelBarY = barY + 20;
-            ctx.fillStyle = '#f7b731';
-            ctx.fillRect(iconX + 2, fuelBarY, iconSize - 4, iconSize);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.fillRect(iconX + 4, fuelBarY + 2, iconSize - 8, 4);
-            ctx.strokeStyle = 'rgba(20, 20, 30, 0.7)';
-            ctx.lineWidth = 2;
+            // Fuel droplet icon
+            ctx.fillStyle = '#e1782b';
             ctx.beginPath();
-            ctx.moveTo(iconX + iconSize - 2, fuelBarY + 3);
-            ctx.lineTo(iconX + iconSize + 6, fuelBarY + 3);
-            ctx.lineTo(iconX + iconSize + 6, fuelBarY + 10);
+            ctx.moveTo(183.0, 649.7);
+            ctx.bezierCurveTo(179.5, 654.1, 175.4, 662.8, 183.0, 662.8);
+            ctx.bezierCurveTo(190.6, 662.8, 186.6, 653.7, 183.0, 649.7);
+            ctx.fill();
+            ctx.strokeStyle = '#375881';
+            ctx.lineWidth = 1.3;
             ctx.stroke();
 
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-            ctx.fillRect(barX, fuelBarY, barWidth, barHeight);
+            // Center framed bar: clip fill to rounded inner slot so corner radius stays intact.
+            const chargeX = 530;
+            const chargeY = 647;
+            const chargeW = 467;
+            const chargeH = 43;
+            const chargeRadius = 6;
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(chargeX, chargeY, chargeW, chargeH, chargeRadius);
+            ctx.clip();
+            ctx.fillStyle = 'rgba(205, 222, 248, 0.9)';
+            ctx.fillRect(chargeX, chargeY, chargeW, chargeH);
+            ctx.restore();
 
-            const fuelWidth = (player.fuel / player.maxFuel) * barWidth;
-            ctx.fillStyle = player.fuel > 50 ? '#f7b731' : player.fuel > 25 ? '#ff9f43' : '#ee5a6f';
-            ctx.fillRect(barX, fuelBarY, fuelWidth, barHeight);
+            // Active charge fill keeps the previous gradient color style.
+            if (chargeRatio > 0) {
+                const chargeFillW = chargeW * chargeRatio;
+                const hueA = 200 - Math.round(chargeRatio * 180);
+                const hueB = Math.max(0, hueA - 24);
+                const gradient = ctx.createLinearGradient(chargeX, 0, chargeX + chargeW, 0);
+                gradient.addColorStop(0, `hsl(${hueA}, 90%, 58%)`);
+                gradient.addColorStop(1, `hsl(${hueB}, 92%, 52%)`);
+                ctx.save();
+                ctx.beginPath();
+                ctx.roundRect(chargeX, chargeY, chargeW, chargeH, chargeRadius);
+                ctx.clip();
+                ctx.fillStyle = gradient;
+                ctx.fillRect(chargeX, chargeY, chargeFillW, chargeH);
+                ctx.restore();
+            }
 
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(barX, fuelBarY, barWidth, barHeight);
+            // Keep frame stroke visually on top of fill.
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(529.5, 646.5, 469, 44, 7.5);
+            const frameStroke = ctx.createLinearGradient(527, 0, 1001, 0);
+            frameStroke.addColorStop(0, '#A05C1D');
+            frameStroke.addColorStop(1, '#CF7724');
+            ctx.strokeStyle = frameStroke;
+            ctx.lineWidth = 5;
+            ctx.stroke();
+            ctx.restore();
+
+            // Charging percentage text (0% to 100%) in the center bar.
+            const chargePercent = Math.max(0, Math.min(100, Math.round(chargeRatio * 100)));
+            ctx.save();
+            ctx.fillStyle = '#223347';
+            ctx.font = '700 20px Poppins';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${chargePercent}%`, chargeX + (chargeW * 0.5), chargeY + (chargeH * 0.52));
+            ctx.restore();
+
+            // Energy bar is the right mini strip below the Ultimate button.
+            drawMissingRect(1090, 679, 69, 8, energyRatio);
+
+            // Ultimate glow is drawn directly on the HUD slot art coordinates.
+            const ultimateReady = isUltimateReady(player);
+            if (ultimateReady) {
+                const ultimateX = 1091;
+                const ultimateY = 602;
+                const ultimateW = 66;
+                const ultimateH = 70;
+                const ultimateR = 9;
+                const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.01);
+                const armed = Boolean(player.ultimateQueued);
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.roundRect(ultimateX, ultimateY, ultimateW, ultimateH, ultimateR);
+                ctx.clip();
+                const topAlpha = armed ? (0.16 + pulse * 0.18) : (0.07 + pulse * 0.11);
+                const bottomAlpha = armed ? (0.08 + pulse * 0.1) : (0.03 + pulse * 0.06);
+                const glowFill = ctx.createLinearGradient(0, ultimateY, 0, ultimateY + ultimateH);
+                glowFill.addColorStop(0, `rgba(186, 241, 255, ${topAlpha.toFixed(3)})`);
+                glowFill.addColorStop(1, `rgba(76, 178, 236, ${bottomAlpha.toFixed(3)})`);
+                ctx.fillStyle = glowFill;
+                ctx.fillRect(ultimateX, ultimateY, ultimateW, ultimateH);
+                ctx.restore();
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.roundRect(ultimateX + 0.5, ultimateY + 0.5, ultimateW - 1, ultimateH - 1, ultimateR);
+                ctx.strokeStyle = armed
+                    ? `rgba(191, 244, 255, ${(0.54 + pulse * 0.3).toFixed(3)})`
+                    : `rgba(141, 222, 255, ${(0.3 + pulse * 0.18).toFixed(3)})`;
+                ctx.lineWidth = armed ? 2.1 : 1.5;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Ultimate armed marker near the button slot.
+            if (player.ultimateQueued && ultimateReady) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(122, 214, 255, 0.95)';
+                ctx.font = '700 12px Poppins';
+                ctx.textAlign = 'right';
+                ctx.fillText('ARMED', 1156, 676);
+                ctx.restore();
+            }
         }
 
         function drawPowerBar(player) {
-            if (!player.charging || projectile) return;
-
-            const barWidth = Math.min(560, Math.max(320, Math.floor(canvas.width * 0.5)));
-            const barHeight = 30;
-            const barX = Math.floor((canvas.width - barWidth) / 2);
-            const barY = canvas.height - 44;
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-            
-            const powerWidth = (player.power / 100) * barWidth;
-            const chargeRatio = Math.max(0, Math.min(1, player.power / 100));
-            const hueA = 200 - Math.round(chargeRatio * 180);
-            const hueB = Math.max(0, hueA - 24);
-            const gradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
-            gradient.addColorStop(0, `hsl(${hueA}, 90%, 58%)`);
-            gradient.addColorStop(1, `hsl(${hueB}, 92%, 52%)`);
-            ctx.fillStyle = gradient;
-            ctx.fillRect(barX, barY, powerWidth, barHeight);
-            
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 16px Poppins';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${Math.round(player.power)}%`, barX + barWidth / 2, barY + 21);
+            // Charge now uses the center Bottom-UI slot.
         }
 
         function drawProjectile() {
             if (!projectile) return;
+
+            const cinematic = isUltimateCinematicActive();
             
             // Trail
-            ctx.strokeStyle = 'rgba(255, 200, 100, 0.5)';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = cinematic ? 'rgba(255, 228, 160, 0.78)' : 'rgba(255, 200, 100, 0.5)';
+            ctx.lineWidth = cinematic ? 6 : 4;
             ctx.beginPath();
             for (let i = 0; i < projectile.trail.length; i++) {
                 const point = projectile.trail[i];
@@ -5347,6 +6066,25 @@
                 else ctx.lineTo(point.x, point.y);
             }
             ctx.stroke();
+
+            if (cinematic) {
+                const glowRadius = projectile.radius * 2.9;
+                const glow = ctx.createRadialGradient(
+                    projectile.x,
+                    projectile.y,
+                    projectile.radius * 0.3,
+                    projectile.x,
+                    projectile.y,
+                    glowRadius
+                );
+                glow.addColorStop(0, 'rgba(255, 244, 195, 0.92)');
+                glow.addColorStop(0.5, 'rgba(255, 182, 88, 0.55)');
+                glow.addColorStop(1, 'rgba(255, 120, 44, 0)');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(projectile.x, projectile.y, glowRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
             
             // Projectile
             ctx.fillStyle = '#ffcc00';
@@ -5357,6 +6095,23 @@
             ctx.strokeStyle = '#ff9900';
             ctx.lineWidth = 2;
             ctx.stroke();
+        }
+
+        function drawUltimateFocusOverlay() {
+            if (!isUltimateCinematicActive()) {
+                return;
+            }
+
+            const screenX = projectile.x - camera.x + game.cameraShakeX;
+            const screenY = projectile.y - camera.y + game.cameraShakeY;
+            const focusRadius = Math.max(120, projectile.radius * 10);
+            const fadeRadius = focusRadius * 2.7;
+            const vignette = ctx.createRadialGradient(screenX, screenY, focusRadius, screenX, screenY, fadeRadius);
+            vignette.addColorStop(0, 'rgba(10, 14, 28, 0)');
+            vignette.addColorStop(0.55, 'rgba(10, 14, 28, 0.58)');
+            vignette.addColorStop(1, 'rgba(10, 14, 28, 0.84)');
+            ctx.fillStyle = vignette;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         function drawMeteors() {
@@ -5440,7 +6195,7 @@
             
             // Apply camera and shake to world rendering
             ctx.save();
-            ctx.translate(-camera.x + game.cameraShakeX, game.cameraShakeY);
+            ctx.translate(-camera.x + game.cameraShakeX, -camera.y + game.cameraShakeY);
 
             drawTerrain();
 
@@ -5481,6 +6236,7 @@
             // Player labels
             ctx.font = 'bold 14px Poppins';
             ctx.textAlign = 'center';
+            const getTeamNameColor = (side) => normalizeTeamSide(side) === 'right' ? '#ff6b6b' : '#4ecdc4';
 
             if (isOnlineMultiParticipantCombat()) {
                 const seatUid1 = online.combat.seatUids[1];
@@ -5492,8 +6248,7 @@
                     if (state.uid === seatUid1 || state.uid === seatUid2) {
                         return;
                     }
-                    const visuals = getSlotVisuals(state.slot);
-                    ctx.fillStyle = visuals.color;
+                    ctx.fillStyle = getTeamNameColor(state.side);
                     const displayName = getShortDisplayName(state.name || getSlotLabel(state.slot));
                     ctx.fillText(displayName, state.x, state.y - 58);
 
@@ -5513,7 +6268,7 @@
                 });
 
                 if (seatState1 && (seatState1.alive || getDeathFadeAlpha(player1) > 0)) {
-                    ctx.fillStyle = player1.color;
+                    ctx.fillStyle = getTeamNameColor(seatState1.side);
                     const seat1Name = getShortDisplayName(seatState1.name || getSlotLabel(seatState1.slot));
                     ctx.fillText(seat1Name, player1.x, player1.y - 58);
                     const seat1HpRatio = Math.max(0, Math.min(1, Number(seatState1.health || 0) / Math.max(1, Number(seatState1.maxHealth || 100))));
@@ -5531,7 +6286,7 @@
                     ctx.font = 'bold 14px Poppins';
                 }
                 if (seatState2 && (seatState2.alive || getDeathFadeAlpha(player2) > 0)) {
-                    ctx.fillStyle = player2.color;
+                    ctx.fillStyle = getTeamNameColor(seatState2.side);
                     const seat2Name = getShortDisplayName(seatState2.name || getSlotLabel(seatState2.slot));
                     ctx.fillText(seat2Name, player2.x, player2.y - 58);
                     const seat2HpRatio = Math.max(0, Math.min(1, Number(seatState2.health || 0) / Math.max(1, Number(seatState2.maxHealth || 100))));
@@ -5584,10 +6339,18 @@
 
             ctx.restore();
 
+            drawUltimateFocusOverlay();
+
             // HUD
-            drawPowerBar(currentPlayerObj);
-            drawPlayerHud(player1);
-            drawPlayerHud(player2);
+            try {
+                const hudBaseDrawn = drawBottomUiBase();
+                drawPowerBar(currentPlayerObj);
+                if (hudBaseDrawn) {
+                    drawPlayerHud(getHudFocusPlayer());
+                }
+            } catch (hudErr) {
+                console.error('HUD draw failed:', hudErr);
+            }
             drawKillingTimeAnnouncement();
         }
 
@@ -5597,7 +6360,9 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Initialize terrain on load
+        // Initialize character assets and terrain on load
+        initCharacterSvgAssets();
+        initBottomUiAsset();
         initTerrain();
         if (typeof auth !== 'undefined' && auth && typeof auth.onAuthStateChanged === 'function') {
             auth.onAuthStateChanged((user) => {

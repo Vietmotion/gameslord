@@ -977,6 +977,39 @@
             color: #ffd0b0;
         }
 
+        #ultimateButton {
+            position: absolute;
+            left: 1091px;
+            top: 602px;
+            width: 66px;
+            height: 70px;
+            z-index: 6;
+            border-radius: 9px;
+            border: none;
+            background: transparent;
+            color: transparent;
+            font-size: 0;
+            box-shadow: none;
+            cursor: default;
+            display: none;
+            transition: none;
+        }
+
+        #ultimateButton.charged {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        #ultimateButton.ready {
+            cursor: pointer;
+            transform: none;
+        }
+
+        #ultimateButton.armed {
+            background: transparent;
+            box-shadow: none;
+        }
+
         /* ---- Lobby UI v2 polish (align to design draft) ---- */
         #startScreen {
             background: rgba(6, 8, 14, 0.92);
