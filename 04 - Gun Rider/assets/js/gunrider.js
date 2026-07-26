@@ -109,6 +109,11 @@
             blastPowerMultiplier: 1.5,
             damageMultiplier: 1.5
         });
+        const WEAPON_MODES = Object.freeze({
+            PRIMARY: 'primary',
+            SECONDARY: 'secondary',
+            ULTIMATE: 'ultimate'
+        });
         const SURFACE_SNAP_GRACE = 12;
         const DEATH_FADE_DURATION_MS = 700;
 
@@ -285,6 +290,7 @@
                 maxFuel: 300,
                 energy: 0,
                 maxEnergy: 100,
+                secondaryQueued: false,
                 ultimateQueued: false,
                 charging: false,
                 groundAngle: surface.slope,
@@ -321,6 +327,7 @@
                     maxFuel: state.maxFuel,
                     energy: state.energy,
                     maxEnergy: state.maxEnergy,
+                    secondaryQueued: state.secondaryQueued,
                     ultimateQueued: state.ultimateQueued,
                     charging: state.charging,
                     groundAngle: state.groundAngle,
@@ -394,6 +401,7 @@
                     maxFuel: Number.isFinite(source.maxFuel) ? source.maxFuel : base.maxFuel,
                     energy: Number.isFinite(source.energy) ? source.energy : base.energy,
                     maxEnergy: Number.isFinite(source.maxEnergy) ? source.maxEnergy : base.maxEnergy,
+                    secondaryQueued: Boolean(source.secondaryQueued),
                     ultimateQueued: Boolean(source.ultimateQueued),
                     charging: Boolean(source.charging),
                     groundAngle: Number.isFinite(source.groundAngle) ? source.groundAngle : base.groundAngle,
@@ -481,6 +489,7 @@
             player.maxFuel = state.maxFuel;
             player.energy = state.energy;
             player.maxEnergy = state.maxEnergy;
+            player.secondaryQueued = Boolean(state.secondaryQueued);
             player.ultimateQueued = Boolean(state.ultimateQueued);
             player.charging = Boolean(state.charging);
             player.groundAngle = state.groundAngle;
@@ -607,6 +616,7 @@
             state.maxFuel = player.maxFuel;
             state.energy = player.energy;
             state.maxEnergy = player.maxEnergy;
+            state.secondaryQueued = Boolean(player.secondaryQueued);
             state.ultimateQueued = Boolean(player.ultimateQueued);
             state.groundAngle = player.groundAngle;
             state.alive = player.health > 0;
@@ -729,10 +739,11 @@
         }
 
         function getProjectileMultiplier(key, fallback = 1) {
-            if (!projectile) {
+            const source = projectile || activeImpactProfile;
+            if (!source) {
                 return fallback;
             }
-            const value = Number(projectile[key]);
+            const value = Number(source[key]);
             return Number.isFinite(value) && value > 0 ? value : fallback;
         }
 
@@ -2451,10 +2462,12 @@
             }
         }
 
-        async function sendOnlineAction(player, usesUltimate = false) {
+        async function sendOnlineAction(player, weaponMode = WEAPON_MODES.PRIMARY) {
             if (!online.active || !online.roomRef || online.applyingRemoteAction) {
                 return;
             }
+            const normalizedMode = String(weaponMode || WEAPON_MODES.PRIMARY).trim().toLowerCase();
+            const usesUltimate = normalizedMode === WEAPON_MODES.ULTIMATE;
             const action = {
                 id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                 actorUid: online.localUid,
@@ -2464,6 +2477,7 @@
                 angle: player.angle,
                 aimFacing: player.aimFacing,
                 power: player.power,
+                weaponMode: normalizedMode,
                 usesUltimate: Boolean(usesUltimate),
                 ts: Date.now()
             };
@@ -2499,6 +2513,7 @@
                 aimFacing: player.aimFacing,
                 fuel: player.fuel,
                 energy: player.energy,
+                secondaryQueued: Boolean(player.secondaryQueued),
                 ultimateQueued: Boolean(player.ultimateQueued),
                 charging: Boolean(player.charging),
                 ts: now
@@ -2513,6 +2528,7 @@
                 payload.aimFacing,
                 Math.round(payload.fuel),
                 Math.round(payload.energy),
+                payload.secondaryQueued ? 1 : 0,
                 payload.ultimateQueued ? 1 : 0,
                 payload.charging ? 1 : 0
             ].join(':');
@@ -2590,6 +2606,7 @@
             if (Number.isFinite(state.energy)) {
                 player.energy = Math.max(0, Math.min(player.maxEnergy, state.energy));
             }
+            player.secondaryQueued = Boolean(state.secondaryQueued);
             player.ultimateQueued = Boolean(state.ultimateQueued);
             player.charging = Boolean(state.charging);
 
@@ -2618,13 +2635,22 @@
             }
             player.angle = clampPlayerLocalAngle(player, action.angle);
             player.power = Math.max(1, Math.min(100, action.power));
-            player.ultimateQueued = Boolean(action.usesUltimate);
+            const actionWeaponMode = String(action.weaponMode || '').trim().toLowerCase();
+            const normalizedMode = actionWeaponMode === WEAPON_MODES.SECONDARY
+                ? WEAPON_MODES.SECONDARY
+                : (actionWeaponMode === WEAPON_MODES.ULTIMATE || Boolean(action.usesUltimate)
+                    ? WEAPON_MODES.ULTIMATE
+                    : WEAPON_MODES.PRIMARY);
+            if (normalizedMode === WEAPON_MODES.SECONDARY) {
+                player.secondaryQueued = true;
+            }
+            player.ultimateQueued = normalizedMode === WEAPON_MODES.ULTIMATE;
             const surface = getSurfaceBelowY(player.x, player.y + 40);
             player.y = surface.y - 40;
             player.groundAngle = surface.slope;
 
             online.applyingRemoteAction = true;
-            fire(player, { usesUltimate: Boolean(action.usesUltimate) });
+            fire(player, { weaponMode: normalizedMode });
             online.applyingRemoteAction = false;
             player.power = 0;
         }
@@ -2718,6 +2744,81 @@
             cropHeight: 213
         };
 
+        const MAP_BANHKEO = {
+            layers: {
+                full: 'map/map1-banhkeo/Full-Map-Banhkeo-1.png',
+                bg: 'map/map1-banhkeo/BG-banhkeo.png',
+                cloud: 'map/map1-banhkeo/cloud.png',
+                main: 'map/map1-banhkeo/island-main.png',
+                fly1: 'map/map1-banhkeo/island-fly-1.png',
+                fly2: 'map/map1-banhkeo/island-fly-2.png'
+            },
+            defaults: {
+                main: { x: 82, y: 335 },
+                fly1: { x: 355, y: 170 },
+                fly2: { x: 1420, y: 90 },
+                cloud: { x: 0, y: 581 }
+            }
+        };
+
+        function createLayerAsset(src) {
+            return {
+                src,
+                image: null,
+                ready: false,
+                failed: false
+            };
+        }
+
+        const MAP_LAYER_ASSETS = {
+            full: createLayerAsset(MAP_BANHKEO.layers.full),
+            bg: createLayerAsset(MAP_BANHKEO.layers.bg),
+            cloud: createLayerAsset(MAP_BANHKEO.layers.cloud),
+            main: createLayerAsset(MAP_BANHKEO.layers.main),
+            fly1: createLayerAsset(MAP_BANHKEO.layers.fly1),
+            fly2: createLayerAsset(MAP_BANHKEO.layers.fly2)
+        };
+
+        const WEAPON_SVG_ASSETS = {
+            projectile1: {
+                src: 'svg/char-catrket/projectile-1.svg',
+                image: null,
+                ready: false,
+                failed: false
+            },
+            projectile2: {
+                src: 'svg/char-catrket/projectile-2.svg',
+                image: null,
+                ready: false,
+                failed: false
+            },
+            projectile3: {
+                src: 'svg/char-catrket/projectile-3.svg',
+                image: null,
+                ready: false,
+                failed: false
+            }
+        };
+
+        const activeStickyMines = [];
+
+        const mapLayerLayout = {
+            main: { ...MAP_BANHKEO.defaults.main },
+            fly1: { ...MAP_BANHKEO.defaults.fly1 },
+            fly2: { ...MAP_BANHKEO.defaults.fly2 },
+            cloud: { ...MAP_BANHKEO.defaults.cloud },
+            cloudSurfaceOffsetY: 2
+        };
+
+        const imageMapState = {
+            assetsLoaded: false,
+            ready: false,
+            usingFallback: false
+        };
+
+        // Lower image-map kill plane a bit so it sits under the island base and cloud cover.
+        const IMAGE_MAP_WATER_LEVEL_OFFSET_Y = 16;
+
         function getAssetUrlCandidates(relativePath) {
             const cleanPath = String(relativePath || '').replace(/^\.?\//, '');
             const candidates = [];
@@ -2801,6 +2902,402 @@
                 BOTTOM_UI_ASSET.failed = true;
                 }
             );
+        }
+
+        function initWeaponSvgAssets() {
+            Object.values(WEAPON_SVG_ASSETS).forEach((asset) => {
+                const img = new Image();
+                asset.image = img;
+                loadImageWithFallback(
+                    img,
+                    getAssetUrlCandidates(asset.src),
+                    () => {
+                        asset.ready = true;
+                        asset.failed = false;
+                    },
+                    () => {
+                        asset.ready = false;
+                        asset.failed = true;
+                    }
+                );
+            });
+        }
+
+        function getWeaponSpriteAsset(key) {
+            if (!key) {
+                return null;
+            }
+            return WEAPON_SVG_ASSETS[key] || null;
+        }
+
+        function getWeaponLoadoutForPlayer(player) {
+            const vehicleType = String(player && player.vehicleType ? player.vehicleType : '').trim().toLowerCase();
+            if (vehicleType === 'catrket') {
+                return {
+                    [WEAPON_MODES.PRIMARY]: {
+                        mode: WEAPON_MODES.PRIMARY,
+                        spriteKey: 'projectile1',
+                        spriteDirection: -1,
+                        radiusMultiplier: 1,
+                        blastPowerMultiplier: 1,
+                        damageMultiplier: 1,
+                        groundBreakMultiplier: 1,
+                        platformBreakMultiplier: 1,
+                        behavior: 'direct'
+                    },
+                    [WEAPON_MODES.SECONDARY]: {
+                        mode: WEAPON_MODES.SECONDARY,
+                        spriteKey: 'projectile2',
+                        spriteDirection: -1,
+                        spriteFlipY: false,
+                        radiusMultiplier: 1,
+                        blastPowerMultiplier: 1.2,
+                        damageMultiplier: 1.25,
+                        groundBreakMultiplier: 0.4,
+                        platformBreakMultiplier: 0.48,
+                        behavior: 'sticky',
+                        stickyDelayMs: 1000,
+                        stickyFlashHz: 11
+                    },
+                    [WEAPON_MODES.ULTIMATE]: {
+                        mode: WEAPON_MODES.ULTIMATE,
+                        spriteKey: 'projectile3',
+                        spriteDirection: -1,
+                        spriteFlipY: false,
+                        radiusMultiplier: 2,
+                        blastPowerMultiplier: 1.9,
+                        damageMultiplier: 2,
+                        groundBreakMultiplier: 2,
+                        platformBreakMultiplier: 2,
+                        behavior: 'direct',
+                        requiresEnergy: true
+                    }
+                };
+            }
+
+            return {
+                [WEAPON_MODES.PRIMARY]: {
+                    mode: WEAPON_MODES.PRIMARY,
+                    spriteKey: 'projectile1',
+                    radiusMultiplier: 1,
+                    blastPowerMultiplier: 1,
+                    damageMultiplier: 1,
+                    groundBreakMultiplier: 1,
+                    platformBreakMultiplier: 1,
+                    behavior: 'direct'
+                },
+                [WEAPON_MODES.SECONDARY]: {
+                    mode: WEAPON_MODES.SECONDARY,
+                    spriteKey: 'projectile2',
+                    radiusMultiplier: 1,
+                    blastPowerMultiplier: 1.1,
+                    damageMultiplier: 1.1,
+                    groundBreakMultiplier: 0.9,
+                    platformBreakMultiplier: 0.9,
+                    behavior: 'direct'
+                },
+                [WEAPON_MODES.ULTIMATE]: {
+                    mode: WEAPON_MODES.ULTIMATE,
+                    spriteKey: 'projectile3',
+                    radiusMultiplier: 1.5,
+                    blastPowerMultiplier: 1.5,
+                    damageMultiplier: 1.5,
+                    groundBreakMultiplier: 1.5,
+                    platformBreakMultiplier: 1.5,
+                    behavior: 'direct',
+                    requiresEnergy: true
+                }
+            };
+        }
+
+        function resolveArmedWeaponMode(player, options = {}) {
+            const requestedMode = String(options.weaponMode || '').trim().toLowerCase();
+            if (requestedMode === WEAPON_MODES.SECONDARY || requestedMode === WEAPON_MODES.ULTIMATE) {
+                return requestedMode;
+            }
+            if (requestedMode === WEAPON_MODES.PRIMARY) {
+                return WEAPON_MODES.PRIMARY;
+            }
+
+            if (Boolean(options.usesUltimate) && isUltimateReady(player)) {
+                return WEAPON_MODES.ULTIMATE;
+            }
+            if (player && player.ultimateQueued && isUltimateReady(player)) {
+                return WEAPON_MODES.ULTIMATE;
+            }
+            if (player && player.secondaryQueued) {
+                return WEAPON_MODES.SECONDARY;
+            }
+            return WEAPON_MODES.PRIMARY;
+        }
+
+        function buildProjectileFromWeapon(player, weaponConfig) {
+            const worldAngle = getPlayerGlobalAngle(player);
+            const angleRad = (worldAngle * Math.PI) / 180;
+            const velocity = player.power / 3.8;
+            const travelAngle = Math.atan2(-Math.sin(angleRad) * velocity, Math.cos(angleRad) * velocity);
+            const horizontalFacing = player === player2 ? -1 : 1;
+
+            return {
+                x: player.x,
+                y: player.y - 20,
+                vx: Math.cos(angleRad) * velocity,
+                vy: -Math.sin(angleRad) * velocity,
+                renderAngle: travelAngle,
+                horizontalFacing,
+                spriteNativeDirection: -1,
+                radius: 8 * Math.max(0.5, Number(weaponConfig.radiusMultiplier) || 1),
+                isUltimate: weaponConfig.mode === WEAPON_MODES.ULTIMATE,
+                weaponMode: weaponConfig.mode,
+                weaponSpriteKey: weaponConfig.spriteKey || 'projectile1',
+                spriteNativeDirection: Number(weaponConfig.spriteDirection) === 1 ? 1 : -1,
+                spriteFlipY: Boolean(weaponConfig.spriteFlipY),
+                behavior: weaponConfig.behavior || 'direct',
+                blastPowerMultiplier: Math.max(0.2, Number(weaponConfig.blastPowerMultiplier) || 1),
+                damageMultiplier: Math.max(0.2, Number(weaponConfig.damageMultiplier) || 1),
+                groundBreakMultiplier: Math.max(0.1, Number(weaponConfig.groundBreakMultiplier) || 1),
+                platformBreakMultiplier: Math.max(0.1, Number(weaponConfig.platformBreakMultiplier) || 1),
+                stickyDelayMs: Math.max(0, Number(weaponConfig.stickyDelayMs) || 0),
+                stickyFlashHz: Math.max(1, Number(weaponConfig.stickyFlashHz) || 10),
+                ownerUid: online.active ? (online.localUid || online.combat.currentTurnUid || null) : null,
+                ownerPlayer: game.currentPlayer,
+                trail: []
+            };
+        }
+
+        function initBanhkeoMapAssets() {
+            let pending = Object.keys(MAP_LAYER_ASSETS).length;
+            const finalize = () => {
+                pending -= 1;
+                if (pending > 0) {
+                    return;
+                }
+                imageMapState.assetsLoaded = true;
+                finalizeBanhkeoMapSetup();
+            };
+
+            Object.values(MAP_LAYER_ASSETS).forEach((asset) => {
+                const img = new Image();
+                asset.image = img;
+                loadImageWithFallback(
+                    img,
+                    getAssetUrlCandidates(asset.src),
+                    () => {
+                        asset.ready = true;
+                        asset.failed = false;
+                        finalize();
+                    },
+                    () => {
+                        asset.ready = false;
+                        asset.failed = true;
+                        finalize();
+                    }
+                );
+            });
+        }
+
+        function getImageDataFromImage(image) {
+            const w = Math.max(1, Number(image.naturalWidth || image.width || 0));
+            const h = Math.max(1, Number(image.naturalHeight || image.height || 0));
+            const temp = document.createElement('canvas');
+            temp.width = w;
+            temp.height = h;
+            const tctx = temp.getContext('2d', { willReadFrequently: true });
+            tctx.clearRect(0, 0, w, h);
+            tctx.drawImage(image, 0, 0, w, h);
+            return tctx.getImageData(0, 0, w, h);
+        }
+
+        function detectTopAlphaRow(image, alphaThreshold = 16) {
+            if (!image) {
+                return 0;
+            }
+            const data = getImageDataFromImage(image);
+            const pixels = data.data;
+            for (let y = 0; y < data.height; y++) {
+                for (let x = 0; x < data.width; x++) {
+                    const idx = (y * data.width + x) * 4;
+                    if (pixels[idx + 3] >= alphaThreshold) {
+                        return y;
+                    }
+                }
+            }
+            return 0;
+        }
+
+        function buildForegroundMaskFromFullMap(fullImage, bgImage, diffThreshold = 18) {
+            const fullData = getImageDataFromImage(fullImage);
+            const bgData = getImageDataFromImage(bgImage);
+            const width = Math.min(fullData.width, bgData.width);
+            const height = Math.min(fullData.height, bgData.height);
+            const mask = new Uint8Array(width * height);
+            const fullPixels = fullData.data;
+            const bgPixels = bgData.data;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const diff = Math.abs(fullPixels[idx] - bgPixels[idx])
+                        + Math.abs(fullPixels[idx + 1] - bgPixels[idx + 1])
+                        + Math.abs(fullPixels[idx + 2] - bgPixels[idx + 2]);
+                    if (diff > diffThreshold) {
+                        mask[y * width + x] = 1;
+                    }
+                }
+            }
+            return { mask, width, height };
+        }
+
+        function findLayerOffsetByMask(layerImage, maskInfo, searchRange, options = {}) {
+            const alphaThreshold = Number.isFinite(options.alphaThreshold) ? options.alphaThreshold : 30;
+            const coarseStep = Number.isFinite(options.coarseStep) ? Math.max(2, options.coarseStep) : 8;
+            const sampleStep = Number.isFinite(options.sampleStep) ? Math.max(1, options.sampleStep) : 6;
+            const refineRadius = Number.isFinite(options.refineRadius) ? Math.max(2, options.refineRadius) : 10;
+
+            const layerData = getImageDataFromImage(layerImage);
+            const pixels = layerData.data;
+            const samplePoints = [];
+            for (let y = 0; y < layerData.height; y += sampleStep) {
+                for (let x = 0; x < layerData.width; x += sampleStep) {
+                    const idx = (y * layerData.width + x) * 4;
+                    if (pixels[idx + 3] >= alphaThreshold) {
+                        samplePoints.push({ x, y });
+                    }
+                }
+            }
+            if (!samplePoints.length) {
+                return { x: searchRange.xMin, y: searchRange.yMin, score: 0 };
+            }
+
+            const evaluate = (ox, oy) => {
+                let hits = 0;
+                for (let i = 0; i < samplePoints.length; i++) {
+                    const pt = samplePoints[i];
+                    const fx = ox + pt.x;
+                    const fy = oy + pt.y;
+                    if (fx < 0 || fy < 0 || fx >= maskInfo.width || fy >= maskInfo.height) {
+                        continue;
+                    }
+                    if (maskInfo.mask[fy * maskInfo.width + fx] === 1) {
+                        hits += 1;
+                    }
+                }
+                return hits / samplePoints.length;
+            };
+
+            let best = { x: searchRange.xMin, y: searchRange.yMin, score: -1 };
+            for (let y = searchRange.yMin; y <= searchRange.yMax; y += coarseStep) {
+                for (let x = searchRange.xMin; x <= searchRange.xMax; x += coarseStep) {
+                    const score = evaluate(x, y);
+                    if (score > best.score) {
+                        best = { x, y, score };
+                    }
+                }
+            }
+
+            let refined = best;
+            const minY = Math.max(searchRange.yMin, best.y - refineRadius);
+            const maxY = Math.min(searchRange.yMax, best.y + refineRadius);
+            const minX = Math.max(searchRange.xMin, best.x - refineRadius);
+            const maxX = Math.min(searchRange.xMax, best.x + refineRadius);
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    const score = evaluate(x, y);
+                    if (score > refined.score) {
+                        refined = { x, y, score };
+                    }
+                }
+            }
+
+            return refined;
+        }
+
+        function finalizeBanhkeoMapSetup() {
+            const required = ['bg', 'cloud', 'main', 'fly1', 'fly2'];
+            const hasRequired = required.every((key) => MAP_LAYER_ASSETS[key].ready);
+            imageMapState.ready = hasRequired;
+            imageMapState.usingFallback = !hasRequired;
+
+            if (MAP_LAYER_ASSETS.full.ready && MAP_LAYER_ASSETS.bg.ready) {
+                try {
+                    const maskInfo = buildForegroundMaskFromFullMap(
+                        MAP_LAYER_ASSETS.full.image,
+                        MAP_LAYER_ASSETS.bg.image
+                    );
+
+                    const mainAsset = MAP_LAYER_ASSETS.main.image;
+                    const fly1Asset = MAP_LAYER_ASSETS.fly1.image;
+                    const fly2Asset = MAP_LAYER_ASSETS.fly2.image;
+                    const cloudAsset = MAP_LAYER_ASSETS.cloud.image;
+
+                    if (MAP_LAYER_ASSETS.main.ready) {
+                        const result = findLayerOffsetByMask(mainAsset, maskInfo, {
+                            xMin: 0,
+                            xMax: Math.max(0, WORLD_WIDTH - mainAsset.width),
+                            yMin: 250,
+                            yMax: 390
+                        }, { coarseStep: 5, sampleStep: 6, refineRadius: 14 });
+                        if (result.score > 0.72) {
+                            mapLayerLayout.main.x = result.x;
+                            mapLayerLayout.main.y = result.y;
+                        }
+                    }
+
+                    if (MAP_LAYER_ASSETS.fly1.ready) {
+                        const result = findLayerOffsetByMask(fly1Asset, maskInfo, {
+                            xMin: 100,
+                            xMax: 900,
+                            yMin: 80,
+                            yMax: 270
+                        }, { coarseStep: 4, sampleStep: 4, refineRadius: 12 });
+                        if (result.score > 0.7) {
+                            mapLayerLayout.fly1.x = result.x;
+                            mapLayerLayout.fly1.y = result.y;
+                        }
+                    }
+
+                    if (MAP_LAYER_ASSETS.fly2.ready) {
+                        const result = findLayerOffsetByMask(fly2Asset, maskInfo, {
+                            xMin: 1000,
+                            xMax: 1900,
+                            yMin: 40,
+                            yMax: 220
+                        }, { coarseStep: 4, sampleStep: 4, refineRadius: 12 });
+                        if (result.score > 0.7) {
+                            mapLayerLayout.fly2.x = result.x;
+                            mapLayerLayout.fly2.y = result.y;
+                        }
+                    }
+
+                    if (MAP_LAYER_ASSETS.cloud.ready) {
+                        const result = findLayerOffsetByMask(cloudAsset, maskInfo, {
+                            xMin: 0,
+                            xMax: 0,
+                            yMin: 520,
+                            yMax: 640
+                        }, { coarseStep: 2, sampleStep: 5, refineRadius: 8 });
+                        if (result.score > 0.7) {
+                            mapLayerLayout.cloud.x = result.x;
+                            mapLayerLayout.cloud.y = result.y;
+                        }
+                    }
+                } catch (layoutErr) {
+                    console.warn('Banhkeo map layer auto-layout failed, using defaults:', layoutErr);
+                }
+            }
+
+            if (MAP_LAYER_ASSETS.cloud.ready) {
+                mapLayerLayout.cloudSurfaceOffsetY = detectTopAlphaRow(MAP_LAYER_ASSETS.cloud.image, 16);
+            }
+
+            if (imageMapState.ready) {
+                BASE_WATER_LEVEL = Math.round(mapLayerLayout.cloud.y + mapLayerLayout.cloudSurfaceOffsetY + IMAGE_MAP_WATER_LEVEL_OFFSET_Y);
+                WATER_LEVEL = BASE_WATER_LEVEL;
+            }
+
+            if (!game.isRunning) {
+                initTerrain();
+            }
         }
 
         function getCharacterSvgAsset(player) {
@@ -2934,6 +3431,7 @@
             maxFuel: 300,
             energy: 0,
             maxEnergy: 100,
+            secondaryQueued: false,
             ultimateQueued: false,
             color: '#4ecdc4',
             charging: false,
@@ -2959,6 +3457,7 @@
             maxFuel: 300,
             energy: 0,
             maxEnergy: 100,
+            secondaryQueued: false,
             ultimateQueued: false,
             color: '#ff6b6b',
             charging: false,
@@ -3245,8 +3744,8 @@
             waterLevel: 640
         };
 
-        // Switch between 'svg' and 'tile' for fast map iteration.
-        const ACTIVE_MAP_MODE = 'svg';
+        // Modes: 'banhkeo-image' (new art pack), 'svg' (legacy), 'tile' (debug).
+        const ACTIVE_MAP_MODE = 'banhkeo-image';
 
         const uniformTerrainScale = Math.min(
             WORLD_WIDTH / MAP01.ground.width,
@@ -3261,9 +3760,12 @@
 
         // Projectile
         let projectile = null;
+        let activeImpactProfile = null;
 
         // Craters system
         let craters = [];
+        let imageMapGroundBaselineHeights = null;
+        const IMAGE_MAP_LAYER_PIXEL_CACHE = {};
 
         // Water level
         let WATER_LEVEL = Math.round(WORLD_HEIGHT - waterHeight);
@@ -3278,6 +3780,101 @@
             fill: MAP01.ground.paths[0].fill,
             stroke: MAP01.ground.paths[0].stroke
         };
+
+        function isImageMapModeReady() {
+            return ACTIVE_MAP_MODE === 'banhkeo-image' && imageMapState.ready;
+        }
+
+        function readLayerAlphaAt(imageData, x, y) {
+            if (!imageData) {
+                return 0;
+            }
+            if (x < 0 || y < 0 || x >= imageData.width || y >= imageData.height) {
+                return 0;
+            }
+            const idx = (y * imageData.width + x) * 4;
+            return imageData.data[idx + 3];
+        }
+
+        function buildGroundHeightsFromImageLayer(image, offsetX, offsetY, alphaThreshold = 26) {
+            const imageData = getImageDataFromImage(image);
+            const heights = new Array(WORLD_WIDTH + 1).fill(WORLD_HEIGHT);
+
+            for (let worldX = 0; worldX <= WORLD_WIDTH; worldX++) {
+                const localX = worldX - Math.round(offsetX);
+                if (localX < 0 || localX >= imageData.width) {
+                    continue;
+                }
+                let topY = null;
+                for (let localY = 0; localY < imageData.height; localY++) {
+                    if (readLayerAlphaAt(imageData, localX, localY) >= alphaThreshold) {
+                        topY = Math.round(offsetY + localY);
+                        break;
+                    }
+                }
+                if (topY !== null) {
+                    heights[worldX] = topY;
+                }
+            }
+
+            return heights;
+        }
+
+        function buildPlatformBandsFromImageLayer(image, offsetX, offsetY, alphaThreshold = 26) {
+            const imageData = getImageDataFromImage(image);
+            const top = new Array(WORLD_WIDTH + 1).fill(null);
+            const bottom = new Array(WORLD_WIDTH + 1).fill(null);
+
+            for (let worldX = 0; worldX <= WORLD_WIDTH; worldX++) {
+                const localX = worldX - Math.round(offsetX);
+                if (localX < 0 || localX >= imageData.width) {
+                    continue;
+                }
+
+                let minY = null;
+                let maxY = null;
+                for (let localY = 0; localY < imageData.height; localY++) {
+                    if (readLayerAlphaAt(imageData, localX, localY) >= alphaThreshold) {
+                        if (minY === null) {
+                            minY = localY;
+                        }
+                        maxY = localY;
+                    }
+                }
+
+                if (minY !== null && maxY !== null) {
+                    top[worldX] = offsetY + minY;
+                    bottom[worldX] = offsetY + maxY;
+                }
+            }
+
+            fillShortGaps(top, 14);
+            fillShortGaps(bottom, 14);
+            fillSurfaceSpan(top);
+            fillSurfaceSpan(bottom);
+
+            return { top, bottom };
+        }
+
+        function buildPlatformBodyFromBands(top, bottom, style = {}, texture = {}) {
+            const body = {
+                role: 'platform',
+                fill: style.fill || '#9F5426',
+                stroke: style.stroke || '#E9B771',
+                originalPath2d: null,
+                isDeformed: true,
+                points: [],
+                surfaceTop: top,
+                surfaceBottom: bottom,
+                originalSurfaceTop: top.slice(),
+                originalSurfaceBottom: bottom.slice(),
+                textureKey: texture.key || null,
+                textureOriginX: Number.isFinite(texture.originX) ? texture.originX : 0,
+                textureOriginY: Number.isFinite(texture.originY) ? texture.originY : 0
+            };
+            rebuildPlatformPointsFromBands(body);
+            return body;
+        }
 
         function buildTileTerrainFromRules(rules) {
             const cols = rules.cols || 48;
@@ -3754,6 +4351,47 @@
                 terrain.push(...tileHeights.map((y, x) => ({ x, y })));
                 WATER_LEVEL = TILE_RULE_MAP.waterLevel || WATER_LEVEL;
                 platformBodies = [];
+            } else if (isImageMapModeReady()) {
+                const mainHeights = buildGroundHeightsFromImageLayer(
+                    MAP_LAYER_ASSETS.main.image,
+                    mapLayerLayout.main.x,
+                    mapLayerLayout.main.y
+                );
+                imageMapGroundBaselineHeights = mainHeights.slice();
+                terrain.push(...mainHeights.map((y, x) => ({ x, y })));
+
+                const fly1Bands = buildPlatformBandsFromImageLayer(
+                    MAP_LAYER_ASSETS.fly1.image,
+                    mapLayerLayout.fly1.x,
+                    mapLayerLayout.fly1.y
+                );
+                const fly2Bands = buildPlatformBandsFromImageLayer(
+                    MAP_LAYER_ASSETS.fly2.image,
+                    mapLayerLayout.fly2.x,
+                    mapLayerLayout.fly2.y
+                );
+
+                platformBodies = [
+                    buildPlatformBodyFromBands(fly1Bands.top, fly1Bands.bottom, {
+                        fill: '#d93764',
+                        stroke: '#ff9bb8'
+                    }, {
+                        key: 'fly1',
+                        originX: mapLayerLayout.fly1.x,
+                        originY: mapLayerLayout.fly1.y
+                    }),
+                    buildPlatformBodyFromBands(fly2Bands.top, fly2Bands.bottom, {
+                        fill: '#d93764',
+                        stroke: '#ff9bb8'
+                    }, {
+                        key: 'fly2',
+                        originX: mapLayerLayout.fly2.x,
+                        originY: mapLayerLayout.fly2.y
+                    })
+                ];
+
+                BASE_WATER_LEVEL = Math.round(mapLayerLayout.cloud.y + mapLayerLayout.cloudSurfaceOffsetY + IMAGE_MAP_WATER_LEVEL_OFFSET_Y);
+                WATER_LEVEL = BASE_WATER_LEVEL;
             } else {
                 const groundPath = MAP01.ground.paths.find(path => path.role === 'ground');
                 if (groundPath) {
@@ -3895,6 +4533,7 @@
             game.cameraHoldX = null;
             game.cameraHoldY = null;
             game.botThinking = false;
+            activeStickyMines.length = 0;
             resetKillingTime();
             if (online.active) {
                 initOnlineCombatRoster();
@@ -3933,6 +4572,7 @@
 
         function resetMatchState() {
             projectile = null;
+            activeStickyMines.length = 0;
             explosionParticles = [];
             craters = [];
             resetAimInput();
@@ -3945,6 +4585,8 @@
             player2.fuel = player2.maxFuel;
             player1.energy = 0;
             player2.energy = 0;
+            player1.secondaryQueued = false;
+            player2.secondaryQueued = false;
             player1.ultimateQueued = false;
             player2.ultimateQueued = false;
             player1.power = 0;
@@ -4206,10 +4848,13 @@
         function isUltimateKey(event) {
             return event.code === 'KeyE' || event.key === 'e' || event.key === 'E';
         }
+        function isSecondaryWeaponKey(event) {
+            return event.code === 'KeyW' || event.key === 'w' || event.key === 'W';
+        }
 
         window.addEventListener('keydown', (e) => {
             keys[e.key] = true;
-            
+
             // Prevent default browser scrolling for arrow keys
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                 e.preventDefault();
@@ -4226,7 +4871,7 @@
                 aimInput.downStartedAt = 0;
                 aimInput.lastDownStepAt = 0;
             }
-            
+
             if (isSpaceKey(e) && game.isRunning && !projectile) {
                 e.preventDefault();
                 const canControlTurn = isLocalTurnOwner();
@@ -4250,15 +4895,29 @@
                 }
                 const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
                 if (isUltimateReady(currentPlayerObj)) {
-                    currentPlayerObj.ultimateQueued = true;
+                    currentPlayerObj.ultimateQueued = !currentPlayerObj.ultimateQueued;
                     updateUltimateButton();
                 }
+            }
+
+            if (isSecondaryWeaponKey(e) && game.isRunning && !projectile) {
+                e.preventDefault();
+                const canControlTurn = isLocalTurnOwner();
+                if (!canControlTurn || game.waitingForTurn || game.endSlowMo) {
+                    return;
+                }
+                const currentPlayerObj = game.currentPlayer === 1 ? player1 : player2;
+                currentPlayerObj.secondaryQueued = !currentPlayerObj.secondaryQueued;
+                if (currentPlayerObj.secondaryQueued) {
+                    currentPlayerObj.ultimateQueued = false;
+                }
+                updateUltimateButton();
             }
         });
 
         window.addEventListener('keyup', (e) => {
             keys[e.key] = false;
-            
+
             // Prevent default browser scrolling for arrow keys
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                 e.preventDefault();
@@ -4275,7 +4934,7 @@
                 aimInput.downStartedAt = 0;
                 aimInput.lastDownStepAt = 0;
             }
-            
+
             if (isSpaceKey(e) && game.isRunning) {
                 e.preventDefault();
                 const canControlTurn = isLocalTurnOwner();
@@ -4310,57 +4969,115 @@
             });
         }
 
+        function queueStickyMineFromProjectile(x, y, surfaceHint = 'ground') {
+            if (!projectile) {
+                return;
+            }
+
+            const now = Date.now();
+            const delayMs = Math.max(120, Number(projectile.stickyDelayMs) || 1000);
+            activeStickyMines.push({
+                x,
+                y,
+                placedAtMs: now,
+                detonateAtMs: now + delayMs,
+                stickyFlashHz: Math.max(1, Number(projectile.stickyFlashHz) || 10),
+                radius: Math.max(3, Number(projectile.radius) || 8),
+                renderAngle: Number.isFinite(projectile.renderAngle) ? projectile.renderAngle : 0,
+                horizontalFacing: Number(projectile.horizontalFacing) === -1 ? -1 : 1,
+                spriteNativeDirection: Number.isFinite(projectile.spriteNativeDirection) ? projectile.spriteNativeDirection : -1,
+                spriteFlipY: Boolean(projectile.spriteFlipY),
+                isUltimate: Boolean(projectile.isUltimate),
+                weaponMode: projectile.weaponMode || WEAPON_MODES.SECONDARY,
+                weaponSpriteKey: projectile.weaponSpriteKey || 'projectile2',
+                blastPowerMultiplier: Math.max(0.2, Number(projectile.blastPowerMultiplier) || 1),
+                damageMultiplier: Math.max(0.2, Number(projectile.damageMultiplier) || 1),
+                groundBreakMultiplier: Math.max(0.1, Number(projectile.groundBreakMultiplier) || 1),
+                platformBreakMultiplier: Math.max(0.1, Number(projectile.platformBreakMultiplier) || 1),
+                impactSurface: surfaceHint
+            });
+        }
+
+        function detonateStickyMine(mine) {
+            if (!mine) {
+                return;
+            }
+
+            const surface = getSurfaceBelowY(mine.x, mine.y - 4);
+            const attachedToPlatform = mine.impactSurface === 'platform';
+            const explosionY = (!attachedToPlatform && surface && surface.source === 'ground') ? surface.y : mine.y;
+            playOneShot(impactGroundSound, sfxCue.impactGround);
+            createExplosion(mine.x, explosionY, mine.blastPowerMultiplier);
+
+            if (attachedToPlatform || isPointInPlatform(mine.x, mine.y) || (surface && surface.source === 'platform')) {
+                createPlatformCrater(mine.x, mine.y, mine.platformBreakMultiplier);
+            }
+
+            if (!attachedToPlatform && surface && surface.source === 'ground') {
+                createCrater(mine.x, surface.y, mine.groundBreakMultiplier);
+            }
+
+            const previousImpact = activeImpactProfile;
+            activeImpactProfile = mine;
+            checkHit(mine.x, explosionY);
+            activeImpactProfile = previousImpact;
+
+            game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, mine.x));
+            game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, explosionY));
+        }
+
+        function updateStickyMines() {
+            if (!activeStickyMines.length) {
+                return;
+            }
+
+            const now = Date.now();
+            for (let i = activeStickyMines.length - 1; i >= 0; i--) {
+                const mine = activeStickyMines[i];
+                if (now >= mine.detonateAtMs) {
+                    detonateStickyMine(mine);
+                    activeStickyMines.splice(i, 1);
+                }
+            }
+        }
+
         function fire(player, options = {}) {
             setChargingSoundActive(false);
             chargeInput.releaseQueued = false;
             chargeInput.owner = null;
 
-            const shouldUseUltimate = Boolean(options.usesUltimate) && isUltimateReady(player);
-            const ultimateProfile = shouldUseUltimate ? getUltimateProfileForPlayer(player) : null;
-            if (shouldUseUltimate) {
+            const requestedMode = resolveArmedWeaponMode(player, options);
+            const loadout = getWeaponLoadoutForPlayer(player);
+            const fallbackWeapon = loadout[WEAPON_MODES.PRIMARY];
+            const selectedWeapon = loadout[requestedMode] || fallbackWeapon;
+            const weapon = (selectedWeapon.requiresEnergy && !isUltimateReady(player)) ? fallbackWeapon : selectedWeapon;
+
+            if (weapon.mode === WEAPON_MODES.ULTIMATE) {
                 player.energy = 0;
             }
             player.ultimateQueued = false;
-            
+
             // Check if this shot will be the final shot (opponent will die)
             const otherPlayer = player === player1 ? player2 : player1;
-            const estimatedDamage = getDamageWithModifiers(online.active ? 28 : (20 + Math.random() * 15));
+            const estimatedDamage = getDamageWithModifiers((online.active ? 28 : (20 + Math.random() * 15)) * Math.max(0.2, Number(weapon.damageMultiplier) || 1));
             const isFinalShot = otherPlayer.health - estimatedDamage <= 0;
-            
+
             // Play shot sound with slow-mo effect if it's the final shot
             if (isFinalShot && shotSound.playbackRate !== undefined) {
-                shotSound.playbackRate = 0.7; // Slow down the shot sound
+                shotSound.playbackRate = 0.7;
                 playOneShot(shotSound, sfxCue.shot);
-                // Reset playback rate for next shot
                 setTimeout(() => { shotSound.playbackRate = 1; }, 200);
             } else {
                 shotSound.playbackRate = 1;
                 playOneShot(shotSound, sfxCue.shot);
             }
-            
-            // Barrel uses player.angle in rotated canvas
-            // World angle = player.angle + player.groundAngle (shown in display)
-            // But for projectile physics, convert the displayed world angle back
-            const worldAngle = getPlayerGlobalAngle(player);
-            const angleRad = (worldAngle * Math.PI) / 180;
-            const velocity = player.power / 3.8;
-            
-            projectile = {
-                x: player.x,
-                y: player.y - 20,
-                vx: Math.cos(angleRad) * velocity,
-                vy: -Math.sin(angleRad) * velocity,
-                radius: 8 * (shouldUseUltimate ? (ultimateProfile ? ultimateProfile.projectileSizeMultiplier : 1.5) : 1),
-                isUltimate: shouldUseUltimate,
-                blastPowerMultiplier: shouldUseUltimate ? (ultimateProfile ? ultimateProfile.blastPowerMultiplier : 1.5) : 1,
-                damageMultiplier: shouldUseUltimate ? (ultimateProfile ? ultimateProfile.damageMultiplier : 1.5) : 1,
-                trail: []
-            };
+
+            projectile = buildProjectileFromWeapon(player, weapon);
 
             if (online.active && !online.applyingRemoteAction) {
-                sendOnlineAction(player, shouldUseUltimate);
+                sendOnlineAction(player, weapon.mode);
             }
-            
+
             player.power = 0;
         }
 
@@ -4377,13 +5094,24 @@
             projectile.vx += effectiveWind * 0.015 * dt; // Wind (half)
             projectile.x += projectile.vx * dt;
             projectile.y += projectile.vy * dt;
+            projectile.renderAngle = Math.atan2(projectile.vy, projectile.vx);
             
             // Check platform collision
             if (isPointInPlatform(projectile.x, projectile.y)) {
+                if (projectile.behavior === 'sticky') {
+                    queueStickyMineFromProjectile(projectile.x, projectile.y, 'platform');
+                    game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                    game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, projectile.y));
+                    projectile = null;
+                    switchTurn();
+                    return;
+                }
+
                 playOneShot(impactGroundSound, sfxCue.impactGround);
                 const blastPower = getProjectileMultiplier('blastPowerMultiplier', 1);
+                const platformBreak = getProjectileMultiplier('platformBreakMultiplier', 1);
                 createExplosion(projectile.x, projectile.y, blastPower);
-                createPlatformCrater(projectile.x, projectile.y, blastPower);
+                createPlatformCrater(projectile.x, projectile.y, platformBreak);
                 checkHit(projectile.x, projectile.y);
                 game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
                 game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, projectile.y));
@@ -4395,11 +5123,22 @@
             // Check terrain collision
             const surface = getSurfaceBelowY(projectile.x, projectile.y);
             if (projectile.y >= surface.y) {
+                if (projectile.behavior === 'sticky') {
+                    const stickY = surface.source === 'ground' ? surface.y : projectile.y;
+                    queueStickyMineFromProjectile(projectile.x, stickY, surface.source);
+                    game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
+                    game.cameraHoldY = Math.max(-CAMERA_TOP_OVERSCAN, Math.min(WORLD_HEIGHT, stickY));
+                    projectile = null;
+                    switchTurn();
+                    return;
+                }
+
                 playOneShot(impactGroundSound, sfxCue.impactGround);
                 const blastPower = getProjectileMultiplier('blastPowerMultiplier', 1);
+                const groundBreak = getProjectileMultiplier('groundBreakMultiplier', 1);
                 createExplosion(projectile.x, surface.y, blastPower);
                 if (surface.source === 'ground') {
-                    createCrater(projectile.x, surface.y, blastPower);
+                    createCrater(projectile.x, surface.y, groundBreak);
                 }
                 checkHit(projectile.x, surface.y);
                 game.cameraHoldX = Math.max(0, Math.min(WORLD_WIDTH, projectile.x));
@@ -5567,6 +6306,7 @@
             updateShake();
             
             updateProjectile(dt);
+            updateStickyMines();
             updateExplosions(dt);
             updateEngineSound();
             updateChargingSound();
@@ -5616,6 +6356,18 @@
         }
 
         function drawTerrain() {
+            if (isImageMapModeReady()) {
+                if (MAP_LAYER_ASSETS.main.ready && MAP_LAYER_ASSETS.main.image) {
+                    drawImageMapMainGroundWithCraterCut();
+                }
+
+                platformBodies.forEach((platformBody) => {
+                    drawImageMapPlatformBodyWithCraterCut(platformBody);
+                });
+
+                return;
+            }
+
             ctx.fillStyle = groundStyle.fill;
             ctx.beginPath();
             ctx.moveTo(0, WORLD_HEIGHT);
@@ -5655,7 +6407,356 @@
             });
         }
 
+        let IMAGE_MAP_MAIN_LAYER_BUFFER = null;
+        let IMAGE_MAP_MAIN_LAYER_BUFFER_CTX = null;
+
+        function ensureImageMapMainLayerBuffer(width, height) {
+            const w = Math.max(1, Math.round(width));
+            const h = Math.max(1, Math.round(height));
+            if (!IMAGE_MAP_MAIN_LAYER_BUFFER
+                || IMAGE_MAP_MAIN_LAYER_BUFFER.width !== w
+                || IMAGE_MAP_MAIN_LAYER_BUFFER.height !== h) {
+                IMAGE_MAP_MAIN_LAYER_BUFFER = document.createElement('canvas');
+                IMAGE_MAP_MAIN_LAYER_BUFFER.width = w;
+                IMAGE_MAP_MAIN_LAYER_BUFFER.height = h;
+                IMAGE_MAP_MAIN_LAYER_BUFFER_CTX = IMAGE_MAP_MAIN_LAYER_BUFFER.getContext('2d');
+            }
+            return IMAGE_MAP_MAIN_LAYER_BUFFER_CTX;
+        }
+
+        function getImageLayerPixelDataCached(cacheKey, image) {
+            if (!image) {
+                return null;
+            }
+            const width = Math.max(1, Math.round(image.naturalWidth || image.width || 0));
+            const height = Math.max(1, Math.round(image.naturalHeight || image.height || 0));
+            const key = `${cacheKey}:${width}x${height}`;
+            if (IMAGE_MAP_LAYER_PIXEL_CACHE[key]) {
+                return IMAGE_MAP_LAYER_PIXEL_CACHE[key];
+            }
+            const imageData = getImageDataFromImage(image);
+            IMAGE_MAP_LAYER_PIXEL_CACHE[key] = imageData;
+            return imageData;
+        }
+
+        function collectRangesByPredicate(startX, endX, predicate) {
+            const ranges = [];
+            let activeStart = null;
+
+            for (let x = startX; x <= endX; x++) {
+                const active = Boolean(predicate(x));
+                if (active && activeStart === null) {
+                    activeStart = x;
+                } else if (!active && activeStart !== null) {
+                    ranges.push({ start: activeStart, end: x - 1 });
+                    activeStart = null;
+                }
+            }
+
+            if (activeStart !== null) {
+                ranges.push({ start: activeStart, end: endX });
+            }
+
+            return ranges;
+        }
+
+        function sampleAutoOutlineColor(imageData, originX, originY, ranges, getYForX, insideOffsetY = 4) {
+            if (!imageData || !ranges.length) {
+                return 'rgba(142, 96, 88, 0.92)';
+            }
+
+            let sumR = 0;
+            let sumG = 0;
+            let sumB = 0;
+            let count = 0;
+
+            ranges.forEach((range) => {
+                for (let x = range.start; x <= range.end; x += 10) {
+                    const y = getYForX(x);
+                    if (!Number.isFinite(y)) {
+                        continue;
+                    }
+
+                    const lx = Math.round(x - originX);
+                    const ly = Math.round(y - originY + insideOffsetY);
+                    if (lx < 0 || ly < 0 || lx >= imageData.width || ly >= imageData.height) {
+                        continue;
+                    }
+
+                    const idx = (ly * imageData.width + lx) * 4;
+                    const alpha = imageData.data[idx + 3];
+                    if (alpha < 24) {
+                        continue;
+                    }
+
+                    sumR += imageData.data[idx];
+                    sumG += imageData.data[idx + 1];
+                    sumB += imageData.data[idx + 2];
+                    count += 1;
+                }
+            });
+
+            if (!count) {
+                return 'rgba(142, 96, 88, 0.92)';
+            }
+
+            const baseR = sumR / count;
+            const baseG = sumG / count;
+            const baseB = sumB / count;
+            const shade = 0.72;
+            const r = Math.max(0, Math.min(255, Math.round(baseR * shade)));
+            const g = Math.max(0, Math.min(255, Math.round(baseG * shade)));
+            const b = Math.max(0, Math.min(255, Math.round(baseB * shade)));
+            return `rgba(${r}, ${g}, ${b}, 0.94)`;
+        }
+
+        function drawOutlineRanges(ranges, getYForX, strokeStyle, lineWidth = 1.35) {
+            if (!ranges.length) {
+                return;
+            }
+
+            ctx.save();
+            ctx.strokeStyle = strokeStyle;
+            ctx.lineWidth = lineWidth;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            ranges.forEach((range) => {
+                ctx.beginPath();
+                let hasPoint = false;
+                for (let x = range.start; x <= range.end; x++) {
+                    const y = getYForX(x);
+                    if (!Number.isFinite(y)) {
+                        continue;
+                    }
+                    if (!hasPoint) {
+                        ctx.moveTo(x, y);
+                        hasPoint = true;
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                if (hasPoint) {
+                    ctx.stroke();
+                }
+            });
+
+            ctx.restore();
+        }
+
+        function drawImageMapGroundCutOutlines(drawX, drawY, imgMain) {
+            if (!imgMain || !imageMapGroundBaselineHeights || !imageMapGroundBaselineHeights.length) {
+                return;
+            }
+
+            const changedRanges = collectRangesByPredicate(0, WORLD_WIDTH, (x) => {
+                const baseY = imageMapGroundBaselineHeights[x];
+                const currentPoint = terrain[x];
+                const currentY = currentPoint && Number.isFinite(currentPoint.y)
+                    ? currentPoint.y
+                    : getTerrainHeight(x);
+                return Number.isFinite(baseY) && Number.isFinite(currentY) && Math.abs(currentY - baseY) > 1.25;
+            });
+
+            if (!changedRanges.length) {
+                return;
+            }
+
+            const imageData = getImageLayerPixelDataCached('main', imgMain);
+            const strokeStyle = sampleAutoOutlineColor(
+                imageData,
+                drawX,
+                drawY,
+                changedRanges,
+                (x) => {
+                    const currentPoint = terrain[x];
+                    return currentPoint && Number.isFinite(currentPoint.y)
+                        ? currentPoint.y
+                        : getTerrainHeight(x);
+                },
+                4
+            );
+
+            drawOutlineRanges(
+                changedRanges,
+                (x) => {
+                    const currentPoint = terrain[x];
+                    return currentPoint && Number.isFinite(currentPoint.y)
+                        ? currentPoint.y
+                        : getTerrainHeight(x);
+                },
+                strokeStyle,
+                1.4
+            );
+        }
+
+        function drawImageMapPlatformCutOutlines(platformBody, textureImage) {
+            if (!platformBody || !textureImage || !platformBody.surfaceTop || !platformBody.surfaceBottom) {
+                return;
+            }
+
+            const baseTop = platformBody.originalSurfaceTop || platformBody.surfaceTop;
+            const baseBottom = platformBody.originalSurfaceBottom || platformBody.surfaceBottom;
+
+            const changedTopRanges = collectRangesByPredicate(0, WORLD_WIDTH, (x) => {
+                const current = platformBody.surfaceTop[x];
+                const original = baseTop[x];
+                return Number.isFinite(current) && Number.isFinite(original) && Math.abs(current - original) > 0.95;
+            });
+
+            const changedBottomRanges = collectRangesByPredicate(0, WORLD_WIDTH, (x) => {
+                const current = platformBody.surfaceBottom[x];
+                const original = baseBottom[x];
+                return Number.isFinite(current) && Number.isFinite(original) && Math.abs(current - original) > 0.95;
+            });
+
+            if (!changedTopRanges.length && !changedBottomRanges.length) {
+                return;
+            }
+
+            const imageData = getImageLayerPixelDataCached(platformBody.textureKey || 'platform', textureImage);
+            const originX = Number.isFinite(platformBody.textureOriginX) ? platformBody.textureOriginX : 0;
+            const originY = Number.isFinite(platformBody.textureOriginY) ? platformBody.textureOriginY : 0;
+
+            if (changedTopRanges.length) {
+                const topColor = sampleAutoOutlineColor(
+                    imageData,
+                    originX,
+                    originY,
+                    changedTopRanges,
+                    (x) => platformBody.surfaceTop[x],
+                    4
+                );
+                drawOutlineRanges(changedTopRanges, (x) => platformBody.surfaceTop[x], topColor, 1.25);
+            }
+
+            if (changedBottomRanges.length) {
+                const bottomColor = sampleAutoOutlineColor(
+                    imageData,
+                    originX,
+                    originY,
+                    changedBottomRanges,
+                    (x) => platformBody.surfaceBottom[x],
+                    -4
+                );
+                drawOutlineRanges(changedBottomRanges, (x) => platformBody.surfaceBottom[x], bottomColor, 1.15);
+            }
+        }
+
+        function drawImageMapMainGroundWithCraterCut() {
+            const imgMain = MAP_LAYER_ASSETS.main.image;
+            if (!imgMain) {
+                return;
+            }
+
+            const drawX = Math.round(mapLayerLayout.main.x);
+            const drawY = Math.round(mapLayerLayout.main.y);
+            const drawW = Math.max(1, Math.round(imgMain.naturalWidth || imgMain.width));
+            const drawH = Math.max(1, Math.round(imgMain.naturalHeight || imgMain.height));
+            const bufferCtx = ensureImageMapMainLayerBuffer(drawW, drawH);
+
+            bufferCtx.clearRect(0, 0, drawW, drawH);
+            bufferCtx.globalCompositeOperation = 'source-over';
+            bufferCtx.drawImage(imgMain, 0, 0, drawW, drawH);
+
+            // Punch out air above the live terrain profile so crater cuts are visible on image maps.
+            bufferCtx.globalCompositeOperation = 'destination-out';
+            bufferCtx.beginPath();
+            bufferCtx.moveTo(0, 0);
+            for (let x = 0; x <= WORLD_WIDTH; x++) {
+                const localX = x - drawX;
+                if (localX < 0 || localX > drawW) {
+                    continue;
+                }
+                const terrainPoint = terrain[x];
+                const terrainY = terrainPoint && Number.isFinite(terrainPoint.y)
+                    ? terrainPoint.y
+                    : getTerrainHeight(x);
+                const localY = terrainY - drawY;
+                bufferCtx.lineTo(localX, Math.max(0, localY));
+            }
+            bufferCtx.lineTo(drawW, 0);
+            bufferCtx.closePath();
+            bufferCtx.fill();
+            bufferCtx.globalCompositeOperation = 'source-over';
+
+            ctx.drawImage(IMAGE_MAP_MAIN_LAYER_BUFFER, drawX, drawY, drawW, drawH);
+            drawImageMapGroundCutOutlines(drawX, drawY, imgMain);
+        }
+
+        function drawImageMapPlatformBodyWithCraterCut(platformBody) {
+            if (!platformBody || !platformBody.path2d) {
+                return;
+            }
+
+            const textureKey = platformBody.textureKey;
+            const textureAsset = textureKey ? MAP_LAYER_ASSETS[textureKey] : null;
+            const textureImage = textureAsset && textureAsset.ready ? textureAsset.image : null;
+
+            if (!textureImage) {
+                ctx.fillStyle = platformBody.fill;
+                ctx.strokeStyle = platformBody.stroke;
+                ctx.lineWidth = 2;
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                ctx.fill(platformBody.path2d);
+                ctx.stroke(platformBody.path2d);
+                return;
+            }
+
+            const drawW = Math.max(1, Math.round(textureImage.naturalWidth || textureImage.width));
+            const drawH = Math.max(1, Math.round(textureImage.naturalHeight || textureImage.height));
+
+            ctx.save();
+            ctx.clip(platformBody.path2d);
+            ctx.drawImage(
+                textureImage,
+                Math.round(platformBody.textureOriginX),
+                Math.round(platformBody.textureOriginY),
+                drawW,
+                drawH
+            );
+            ctx.restore();
+
+            drawImageMapPlatformCutOutlines(platformBody, textureImage);
+        }
+
+        function drawFarBackground() {
+            if (isImageMapModeReady() && MAP_LAYER_ASSETS.bg.ready && MAP_LAYER_ASSETS.bg.image) {
+                const bgImage = MAP_LAYER_ASSETS.bg.image;
+                ctx.drawImage(bgImage, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                return;
+            }
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#2d3561');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
         function drawWater() {
+            if (isImageMapModeReady() && MAP_LAYER_ASSETS.cloud.ready && MAP_LAYER_ASSETS.cloud.image) {
+                const cloudImage = MAP_LAYER_ASSETS.cloud.image;
+                const riseOffset = Math.max(0, BASE_WATER_LEVEL - WATER_LEVEL);
+                const drawY = Math.round(mapLayerLayout.cloud.y - riseOffset);
+                const cloudH = cloudImage.naturalHeight || cloudImage.height;
+
+                // Keep submerged area opaque but start below cloud art to avoid a visible flat water band.
+                const hiddenFillTop = Math.round(drawY + cloudH - 2);
+                ctx.fillStyle = 'rgba(255, 214, 227, 0.94)';
+                ctx.fillRect(0, hiddenFillTop, WORLD_WIDTH, WORLD_HEIGHT - hiddenFillTop);
+
+                ctx.drawImage(
+                    cloudImage,
+                    Math.round(mapLayerLayout.cloud.x),
+                    drawY,
+                    cloudImage.naturalWidth || cloudImage.width,
+                    cloudH
+                );
+                return;
+            }
+
             // Water body
             const waterFill = ACTIVE_MAP_MODE === 'tile' ? '#6B9EA2' : MAP01.water.fill;
             const waterStroke = ACTIVE_MAP_MODE === 'tile' ? '#5AC4BF' : MAP01.water.stroke;
@@ -5867,6 +6968,54 @@
                 return;
             }
 
+            const drawWeaponSlotIcon = (spriteKey, slotX, slotY, slotW, slotH, keyLabel, armed = false, iconShiftX = 0, iconShiftY = 0, options = {}) => {
+                const spriteAsset = getWeaponSpriteAsset(spriteKey);
+                const hasSprite = Boolean(spriteAsset && spriteAsset.ready && spriteAsset.image);
+                const clipRadius = Number.isFinite(options.clipRadius) ? options.clipRadius : 7;
+                const fitPad = Number.isFinite(options.fitPad) ? options.fitPad : 8;
+                const scaleMultiplier = Number.isFinite(options.scaleMultiplier) ? options.scaleMultiplier : 1;
+
+                if (armed) {
+                    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.roundRect(slotX + 0.5, slotY + 0.5, slotW - 1, slotH - 1, clipRadius);
+                    ctx.strokeStyle = `rgba(166, 236, 255, ${(0.35 + pulse * 0.3).toFixed(3)})`;
+                    ctx.lineWidth = 1.8;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                if (hasSprite) {
+                    const natW = Math.max(1, spriteAsset.image.naturalWidth || spriteAsset.image.width || 1);
+                    const natH = Math.max(1, spriteAsset.image.naturalHeight || spriteAsset.image.height || 1);
+                    const fitW = Math.max(2, slotW - fitPad * 2);
+                    const fitH = Math.max(2, slotH - fitPad * 2);
+                    const scale = Math.min(fitW / natW, fitH / natH) * scaleMultiplier;
+                    const drawW = natW * scale;
+                    const drawH = natH * scale;
+                    const dx = slotX + (slotW - drawW) * 0.5 + iconShiftX;
+                    const dy = slotY + (slotH - drawH) * 0.5 + iconShiftY;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.roundRect(slotX, slotY, slotW, slotH, clipRadius);
+                    ctx.clip();
+                    ctx.globalAlpha = armed ? 1 : 0.92;
+                    ctx.drawImage(spriteAsset.image, dx, dy, drawW, drawH);
+                    ctx.restore();
+                }
+
+                if (keyLabel) {
+                    ctx.save();
+                    ctx.fillStyle = armed ? '#daf6ff' : 'rgba(210, 232, 255, 0.9)';
+                    ctx.font = '700 11px Poppins';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'alphabetic';
+                    ctx.fillText(keyLabel, slotX + slotW * 0.5, slotY + slotH + 12);
+                    ctx.restore();
+                }
+            };
+
             const hpRatio = Math.max(0, Math.min(1, player.health / Math.max(1, player.maxHealth)));
             const gasRatio = Math.max(0, Math.min(1, player.fuel / Math.max(1, player.maxFuel)));
             const energyRatio = getEnergyRatio(player);
@@ -6001,6 +7150,19 @@
             // Energy bar is the right mini strip below the Ultimate button.
             drawMissingRect(1090, 679, 69, 8, energyRatio);
 
+            const secondarySlotX = 1039;
+            const secondarySlotY = 638;
+            const secondarySlotW = 40;
+            const secondarySlotH = 35;
+            const secondarySlotCenterX = secondarySlotX + (secondarySlotW * 0.5);
+            const secondaryArmed = Boolean(player.secondaryQueued);
+            const ultimateArmed = Boolean(player.ultimateQueued) && isUltimateReady(player);
+            drawWeaponSlotIcon('projectile2', secondarySlotX, secondarySlotY, secondarySlotW, secondarySlotH, 'W', secondaryArmed, 0, 0, {
+                fitPad: 5,
+                clipRadius: 4
+            });
+            drawWeaponSlotIcon('projectile3', 1091, 602, 66, 70, 'E', ultimateArmed);
+
             // Ultimate glow is drawn directly on the HUD slot art coordinates.
             const ultimateReady = isUltimateReady(player);
             if (ultimateReady) {
@@ -6045,6 +7207,15 @@
                 ctx.fillText('ARMED', 1156, 676);
                 ctx.restore();
             }
+
+            if (player.secondaryQueued) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(122, 214, 255, 0.92)';
+                ctx.font = '700 11px Poppins';
+                ctx.textAlign = 'center';
+                ctx.fillText('ARMED', secondarySlotCenterX, 676);
+                ctx.restore();
+            }
         }
 
         function drawPowerBar(player) {
@@ -6052,10 +7223,65 @@
         }
 
         function drawProjectile() {
-            if (!projectile) return;
+            const drawProjectileBody = (proj, flashing = false) => {
+                const spriteAsset = getWeaponSpriteAsset(proj.weaponSpriteKey);
+                const spriteReady = Boolean(spriteAsset && spriteAsset.ready && spriteAsset.image);
+                const travelAngle = Number.isFinite(proj.renderAngle)
+                    ? proj.renderAngle
+                    : Math.atan2(Number(proj.vy) || 0, Number(proj.vx) || 0);
+                const nativeDirection = Number.isFinite(proj.spriteNativeDirection) ? proj.spriteNativeDirection : -1;
+                const desiredFacing = Number(proj.horizontalFacing) === -1 ? -1 : 1;
+                const shouldFlipX = desiredFacing !== nativeDirection;
+                const baselineAngle = shouldFlipX
+                    ? (nativeDirection === -1 ? 0 : Math.PI)
+                    : (nativeDirection === -1 ? Math.PI : 0);
+
+                if (spriteReady) {
+                    const natW = Math.max(1, spriteAsset.image.naturalWidth || spriteAsset.image.width || 1);
+                    const natH = Math.max(1, spriteAsset.image.naturalHeight || spriteAsset.image.height || 1);
+                    const longSide = Math.max(12, proj.radius * 5.6);
+                    const aspect = natW / natH;
+                    const drawW = aspect >= 1 ? longSide : longSide * aspect;
+                    const drawH = aspect >= 1 ? longSide / aspect : longSide;
+                    ctx.save();
+                    ctx.translate(proj.x, proj.y);
+                    ctx.rotate(travelAngle - baselineAngle);
+                    if (shouldFlipX) {
+                        ctx.scale(-1, 1);
+                    }
+                    if (proj.spriteFlipY) {
+                        ctx.scale(1, -1);
+                    }
+                    if (flashing) {
+                        ctx.globalAlpha = 0.55;
+                    }
+                    ctx.drawImage(spriteAsset.image, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
+                    ctx.restore();
+                    return;
+                }
+
+                ctx.fillStyle = flashing ? '#ffffff' : '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = flashing ? '#ff5555' : '#ff9900';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            };
+
+            activeStickyMines.forEach((mine) => {
+                const msLeft = Math.max(0, mine.detonateAtMs - Date.now());
+                const flashing = (Math.floor((msLeft / 1000) * mine.stickyFlashHz) % 2) === 0;
+                drawProjectileBody(mine, flashing);
+            });
+
+            if (!projectile) {
+                return;
+            }
 
             const cinematic = isUltimateCinematicActive();
-            
+
             // Trail
             ctx.strokeStyle = cinematic ? 'rgba(255, 228, 160, 0.78)' : 'rgba(255, 200, 100, 0.5)';
             ctx.lineWidth = cinematic ? 6 : 4;
@@ -6085,16 +7311,8 @@
                 ctx.arc(projectile.x, projectile.y, glowRadius, 0, Math.PI * 2);
                 ctx.fill();
             }
-            
-            // Projectile
-            ctx.fillStyle = '#ffcc00';
-            ctx.beginPath();
-            ctx.arc(projectile.x, projectile.y, projectile.radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.strokeStyle = '#ff9900';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+
+            drawProjectileBody(projectile, false);
         }
 
         function drawUltimateFocusOverlay() {
@@ -6186,12 +7404,7 @@
         }
 
         function draw() {
-            // Sky gradient
-            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            gradient.addColorStop(0, '#1a1a2e');
-            gradient.addColorStop(1, '#2d3561');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawFarBackground();
             
             // Apply camera and shake to world rendering
             ctx.save();
@@ -6363,6 +7576,8 @@
         // Initialize character assets and terrain on load
         initCharacterSvgAssets();
         initBottomUiAsset();
+        initWeaponSvgAssets();
+        initBanhkeoMapAssets();
         initTerrain();
         if (typeof auth !== 'undefined' && auth && typeof auth.onAuthStateChanged === 'function') {
             auth.onAuthStateChanged((user) => {
